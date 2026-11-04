@@ -203,6 +203,22 @@ class StoreTest extends TestCase
         $this->putJson('/api/admin/settings', ['cod_enabled' => true, 'bank_enabled' => false, 'card_enabled' => true])->assertUnprocessable();
     }
 
+    public function test_all_actual_order_statuses_enqueue_branded_messages_once(): void
+    {
+        Mail::fake();config(['mail.default'=>'smtp','mail.from.address'=>'info@rangmahal.site','mail.from.name'=>'Rang Mahal']);
+        [$id,$variant]=$this->product();$r=$this->postJson('/api/orders',$this->payload($id,$variant))->assertCreated();
+        $orderId=DB::table('orders')->where('reference',$r->json('reference'))->value('id');$this->actingAs($this->staff());
+        foreach(['Confirmed','Processing','Packed','Shipped','Out for Delivery','Delivered','Returned'] as $status){
+            $this->putJson('/api/admin/orders',['id'=>$orderId,'status'=>$status])->assertOk();
+            $this->putJson('/api/admin/orders',['id'=>$orderId,'status'=>$status])->assertOk();
+        }
+        $this->assertEquals(8,DB::table('order_email_outbox')->where('order_id',$orderId)->count());
+        $this->assertEquals(8,\App\Support\OrderEmails::deliver());
+        Mail::assertSent(\App\Mail\OrderUpdate::class,8);
+        Mail::assertSent(\App\Mail\OrderUpdate::class,function($mail){$html=$mail->render();return $mail->details['order']['status']==='Shipped' && str_contains($mail->heading(),'dispatched') && str_contains($html,'alt="Rang Mahal"') && str_contains($html,'info@rangmahal.site') && str_contains($html,'Track your order');});
+        Mail::assertSent(\App\Mail\OrderUpdate::class,fn($mail)=>$mail->details['event']==='placed' && str_contains($mail->heading(),'received'));
+    }
+
     public function test_email_failures_retry_without_changing_order_or_stock(): void
     {
         config(['mail.default' => 'smtp']);

@@ -36,11 +36,25 @@ return [
     */
 
     'mailers' => [
+        // GoDaddy cPanel authorizes relay by the hosting account; never send mailbox credentials to it.
+        'hosting' => [
+            'transport' => 'smtp',
+            'scheme' => 'smtp',
+            'host' => env('MAIL_HOSTING_HOST', 'sg2plzcpnl509375.prod.sin2.secureserver.net'),
+            'port' => (int) env('MAIL_HOSTING_PORT', 25),
+            'username' => null,
+            'password' => null,
+            'require_tls' => true,
+            'auto_tls' => true,
+            'timeout' => (int) env('MAIL_TIMEOUT', 30),
+            'local_domain' => env('MAIL_EHLO_DOMAIN', 'rangmahal.site'),
+        ],
+
 
         'smtp' => [
             'transport' => 'smtp',
             'scheme' => env('MAIL_SCHEME'),
-            'url' => env('MAIL_URL'),
+            'url' => env('MAIL_URL') ?: null,
             'host' => env('MAIL_HOST', '127.0.0.1'),
             'port' => env('MAIL_PORT', 2525),
             'username' => env('MAIL_USERNAME'),

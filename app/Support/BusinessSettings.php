@@ -9,7 +9,7 @@ class BusinessSettings
     {
         return [
             'measurement_services' => StitchingMeasurements::services(),
-            'instagram_url' => 'https://www.instagram.com/rangmahal_saree.couture?exln=MWp4NGYxc3l4b3F3YQ==', 'facebook_url' => 'https://www.facebook.com/share/1EzwsDoDMD/', 'whatsapp_url' => '',
+            'instagram_url' => 'https://www.instagram.com/rangmahal.site?vrfl=MWl3MzFzc3I0a3k4dg==', 'facebook_url' => 'https://www.facebook.com/share/1EzwsDoDMD/', 'whatsapp_url' => '',
             'support_email' => '', 'brand_name' => 'Rang Mahal', 'urdu_brand_name' => 'رنگ محل', 'tagline' => 'Rooted in Tradition, Worn with Love.',
             'standard_delivery_charge' => 350, 'free_delivery_threshold' => 10000, 'default_stitching_charge' => 5000,
             'stitching_enabled' => true, 'order_prefix' => 'RM', 'order_category_code' => 'SR',

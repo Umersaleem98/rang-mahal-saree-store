@@ -115,14 +115,14 @@ a svg {
   position: absolute;
   left: 0;
   white-space: nowrap;
-  animation: announcement-left-to-right 22s linear infinite;
+  animation: announcement-right-to-left 22s linear infinite;
   animation-delay: -7s;
   will-change: transform;
 }
 .announcement:hover .announcement-message { animation-play-state: paused; }
-@keyframes announcement-left-to-right {
-  from { transform: translateX(-100%); }
-  to { transform: translateX(100vw); }
+@keyframes announcement-right-to-left {
+  from { transform: translateX(100vw); }
+  to { transform: translateX(-100%); }
 }
 .header-top {
   height: 95px;

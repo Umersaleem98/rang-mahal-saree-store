@@ -1,5 +1,6 @@
 {{ $details['business']['brand_name'] }}
-{{ $details['event']==='placed' ? 'Thank you for your order.' : 'Your order has been updated.' }}
+{{ $heading }}
+{{ $updateMessage }}
 Dear {{ $details['order']['name'] }},
 Tracking ID: {{ $details['order']['reference'] }}
 Order date: {{ $details['order']['created_at'] }}
@@ -15,7 +16,8 @@ Courier tracking: {{ $details['order']['courier_tracking_number'] ?: 'Not yet as
 Estimated delivery: {{ $details['order']['estimated_delivery_date'] ?: 'Not yet confirmed' }}
 Track: {{ url('/track?reference='.rawurlencode($details['order']['reference'])) }}
 Use your reference and checkout email to view your order securely.
-Reply to this email for help.
+Reply to this email for help: {{ config('mail.from.address') }}
+Website: {{ config('app.url') }}
 Return address: {{ $details['business']['return_address'] }}
 {{ $details['business']['return_policy'] }}
 {{ $details['business']['refund_conditions'] }}
