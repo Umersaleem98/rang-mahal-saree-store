@@ -17,12 +17,15 @@ import {
   PackageCheck,
   Check,
   Instagram,
+  Facebook,
   MapPin,
   SlidersHorizontal,
 } from "lucide-react";
 import {StorePolicy,TrackingDetails,initialBusiness} from "./StoreBusiness";
+import {MeasurementCheckout,MeasurementsSummary,cmToUnit} from "./Stitching";
 import { money } from "../lib/catalog.mjs";
 import { defaultPayments } from "../lib/settings-client.mjs";
+const WhatsAppIcon=()=> <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" aria-hidden="true"><path d="M21 11.5a9 9 0 0 1-13.4 7.9L3 21l1.6-4.6A9 9 0 1 1 21 11.5Z"/><path d="M8 7c-2 3 3 8 6 8l2-2-3-1-1 1c-1.5-.7-2.3-1.5-3-3l1-1-1-2Z"/></svg>;
 const IconButton = ({ label, children, ...props }) => (
   <button className="icon-button" aria-label={label} {...props}>
     {children}
@@ -66,6 +69,8 @@ export default function Store({ initialProducts }) {
     [tracked, setTracked] = useState(null),
     [mobile, setMobile] = useState(false),
     [brand, setBrand] = useState("All brands");
+  const [measurementFields,setMeasurementFields]=useState({});
+  const [measurements,setMeasurements]=useState({});
   const [galleryIndex, setGalleryIndex] = useState(0);
   const [chosenVariant, setChosenVariant] = useState(null);
   const [trackingReference, setTrackingReference] = useState("");
@@ -81,6 +86,7 @@ export default function Store({ initialProducts }) {
     setReady(true);
     api("catalog").then((d) => {
       setProducts(d.products);
+      setMeasurementFields(d.stitching_fields||{});
       if(d.business)setBusiness(d.business);
       const productId=location.pathname.match(/^\/products\/(\d+)$/)?.[1];if(productId)setSelected(d.products.find(p=>p.id===Number(productId))||null);
       setSelected(previous=>previous?d.products.find(p=>p.id===previous.id)||null:null);
@@ -170,6 +176,7 @@ export default function Store({ initialProducts }) {
       if (e.key === "Escape") {
         setPanel(null);
         setSelected(null);
+        setMobile(false);
       }
     };
     window.addEventListener("keydown", f);
@@ -239,11 +246,11 @@ export default function Store({ initialProducts }) {
     setBusy(true);
     try {
       const b = Object.fromEntries(new FormData(e.currentTarget));
-      const d = await api(path, path === "orders" ? { ...b, checkout_token: checkoutToken, items: items.map(i => ({id:i.id,variant_id:i.variant_id,quantity:i.quantity})) } : b);
+      const d = await api(path, path === "orders" ? { ...b, checkout_token: checkoutToken, items: items.map(i => {const d=measurements[i.variant_id]||{unit:'cm',values:{}};return {id:i.id,variant_id:i.variant_id,quantity:i.quantity,...(i.variant?.type==='Stitched'?{measurements:{unit:d.unit,values:Object.fromEntries(Object.entries(d.values).filter(([,v])=>v!==''&&v!=null).map(([k,v])=>[k,cmToUnit(v,d.unit)])),fit:d.fit||'Regular',instructions:d.instructions||''}}:{})};}) } : b);
       if (path === "orders") {
         setConfirmation(d);
         setCheckoutToken(crypto.randomUUID());
-        setBag([]);
+        setBag([]); setMeasurements({});
         api("catalog").then((d) => setProducts(d.products));
       }
       if (path === "track") setTracked(d.order);
@@ -255,7 +262,7 @@ export default function Store({ initialProducts }) {
   }
   async function beginCheckout() {
     setBusy(true); setConfirmation(null); setCheckoutToken(crypto.randomUUID());
-    try { const settings = await api("catalog"); setPayments(settings.payments); setProducts(settings.products); setBusiness(settings.business); setPanel("checkout"); }
+    try { const settings = await api("catalog"); setPayments(settings.payments); setProducts(settings.products); setBusiness(settings.business); setMeasurementFields(settings.stitching_fields||{}); setPanel("checkout"); }
     catch (e) { setError(e.message); } finally { setBusy(false); }
   }
   function account() { location.assign("/track"); }
@@ -324,11 +331,11 @@ export default function Store({ initialProducts }) {
       >
         <div className="announcement" aria-label="Store announcement"><span className="announcement-message">{business ? `FREE DELIVERY ON ORDERS ABOVE PKR ${Number(business.free_delivery_threshold).toLocaleString("en-PK")}` : "RANG MAHAL"} <ArrowRight size={12}/></span></div><header>
           <div className="header-top">
-            <IconButton label="Open menu" onClick={() => setMobile(!mobile)}>
-              <Menu />
+            <IconButton label={mobile?"Close menu":"Open menu"} aria-expanded={mobile} aria-controls="mobile-collection-nav" onClick={() => setMobile(!mobile)}>
+              {mobile?<X/>:<Menu />}
             </IconButton>
             <a className="brand-lockup header-brand" href="/" aria-label="Rang Mahal — home">
-              <img className="brand-emblem" src="/images/rang-mahal-premium.webp" alt="" width="320" height="320" fetchPriority="high" />
+              <img className="brand-emblem" src="/images/rang-mahal-couture-small.webp" srcSet="/images/rang-mahal-couture-small.webp 256w, /images/rang-mahal-couture.webp 768w" sizes="(max-width: 760px) 80px, 110px" alt="" width="320" height="320" fetchPriority="high" />
               <span className="brand-wordmark">{business?.brand_name}<span className="brand-tagline">{business?.tagline}</span></span>
             </a>
             <div className="header-actions">
@@ -359,14 +366,10 @@ export default function Store({ initialProducts }) {
               </IconButton>
             </div>
           </div>
-          </header><nav aria-label="Saree collections" className={mobile ? "category-nav open" : "category-nav"}>
+          </header><nav id="mobile-collection-nav" aria-label="Saree collections" className={mobile ? "category-nav open" : "category-nav"}>
             {["All Sarees",...categories].map(c=><button key={c} onClick={()=>browse(c)}>{c}</button>)}
             <button
-              onClick={() =>
-                document
-                  .getElementById("story")
-                  .scrollIntoView({ behavior: "smooth" })
-              }
+              onClick={() => {setMobile(false);document.getElementById("story")?.scrollIntoView({ behavior: "smooth" });}}
             >
               Our Story
             </button>
@@ -399,29 +402,7 @@ export default function Store({ initialProducts }) {
               ))}
             </div>
           </section>
-          {category === "All Sarees" && !search && products.some(p=>p.featured) && <section className="featured-collection wrap"><div className="section-intro"><div><div className="eyebrow">CHOSEN FOR YOU</div><h2>Featured <em>sarees.</em></h2></div></div><div className="product-grid">{products.filter(p=>p.featured).map(productCard)}</div></section>}
-          <section className="collection wrap" id="collection">
-            <div className="section-intro">
-              <div>
-                <div className="eyebrow">
-                  SAREES ONLINE IN PAKISTAN
-                </div>
-                <h2>
-                  {category === "Wishlist" ? (
-                    "Your favourites."
-                  ) : category !== "All Sarees" ? (
-                    <>{category}. <em>Make it yours.</em></>
-                  ) : (
-                    <>
-                      Find a colour. <em>Make it yours.</em>
-                    </>
-                  )}
-                </h2>
-              </div>
-              <span className="small-note">
-                From Eid gatherings to wedding celebrations.
-              </span>
-            </div>
+          <section className="collection wrap" id="collection" aria-label="Saree products">
             <div className="collection-tools">
               <div className="sort">
                 <SlidersHorizontal size={15} />
@@ -483,10 +464,7 @@ export default function Store({ initialProducts }) {
             </div>
             <div className="editorial-copy">
               <div className="eyebrow">OUR STORY</div><h2>The Timeless Grace<br/>of <em>Rang Mahal</em></h2>
-              <p>Across the subcontinent, the saree has long been celebrated as a timeless expression of femininity, grace, and elegance. Its flowing silhouette, intricate artistry, and rich heritage have made it one of the most beautiful traditional garments for women.</p>
-              <p>At Rang Mahal, we believe that a saree is more than just a piece of clothing. It is a story woven through generations, a reflection of culture, and a celebration of timeless beauty.</p>
-              <p>Inspired by the colours, artistry, and heritage of Pakistan, Rang Mahal brings this centuries-old tradition into the modern world. Our collection celebrates the elegance of the saree while honouring the cultural richness that makes it truly special.</p>
-              <p>We are here to keep this beautiful tradition alive — bringing timeless elegance to every woman, one saree at a time.</p>
+              <p>Rooted in the timeless beauty of South Asian heritage, Rang Mahal celebrates the elegance of sarees through a harmonious blend of tradition, craftsmanship, and contemporary grace. Every drape tells a story of culture, femininity, and artistry, bringing cherished traditions to life with a touch of modern sophistication.</p>
             </div>
           </section>
         </main>
@@ -494,7 +472,7 @@ export default function Store({ initialProducts }) {
           <div className="footer-main wrap">
             <div className="footer-brand">
               <a className="brand-lockup footer-brand-lockup" href="/" aria-label="Rang Mahal — home">
-                <img className="brand-emblem" src="/images/rang-mahal-premium.webp" alt="" width="320" height="320" loading="lazy" decoding="async" />
+                <img className="brand-emblem" src="/images/rang-mahal-couture-small.webp" srcSet="/images/rang-mahal-couture-small.webp 256w, /images/rang-mahal-couture.webp 768w" sizes="(max-width: 760px) 80px, 110px" alt="" width="320" height="320" loading="lazy" decoding="async" />
                 <span className="brand-wordmark">{business?.brand_name}<span className="brand-tagline">{business?.tagline}</span></span>
               </a>
               <p>{business?.tagline}</p>
@@ -527,6 +505,7 @@ export default function Store({ initialProducts }) {
               <button onClick={()=>setPanel("payment")}>Payment information</button>
             </div>
           </div>
+          <section className="footer-social wrap" aria-label="Follow Us on Social Media"><h4>Follow Us on Social Media</h4><div><a href={business?.instagram_url} target="_blank" rel="noopener noreferrer"><Instagram size={20}/>Instagram</a><a href={business?.facebook_url} target="_blank" rel="noopener noreferrer"><Facebook size={20}/>Facebook</a>{business?.whatsapp_url?<a href={business.whatsapp_url} target="_blank" rel="noopener noreferrer"><WhatsAppIcon/>WhatsApp</a>:<button disabled title="WhatsApp contact will be available soon"><WhatsAppIcon/>WhatsApp <small>Coming soon</small></button>}</div></section>
           <div className="footer-bottom wrap">
             <span>
               © {new Date().getFullYear()} Rang Mahal. All rights reserved.
@@ -565,6 +544,7 @@ export default function Store({ initialProducts }) {
               <h2>{selected.name}</h2>
               <div className="price">{money(selectedOption?.price ?? selected.price)} {selectedOption?.discount > 0 && <><del>{money(selectedOption.regular_price)}</del><span className="sale-label">{selectedOption.discount}% OFF</span></>}</div>
               <fieldset className="variant-picker"><legend>Choose your option</legend>{["Unstitched","Stitched"].map(type=>{const v=selected.variants?.find(v=>v.type===type);return <label key={type} className={!v?.enabled || !v.stock ? "unavailable" : ""}><input type="radio" name="variant" value={v?.id || ""} checked={v?.id === chosenVariant} disabled={!v?.enabled || !v.stock} onChange={()=>setChosenVariant(v.id)} />{type}<span>{v?.enabled ? money(v.price) : "Unavailable"} · {v?.enabled ? v.stock+" Pieces Left" : "Not offered"}</span></label>;})}</fieldset>
+              {selectedOption?.type==='Stitched'&&<aside className="stitching-notice" role="status"><strong>Your Perfect Fit, Made Just for You!</strong><p>Your measurements will be collected at checkout to ensure your saree is stitched according to your preferred fit. Please proceed to checkout to provide your measurements.</p></aside>}
               <p>{selected.description}</p><p className="product-shipping">{selected.shipping_info || `Delivery ${money(business?.standard_delivery_charge || 0)}. Free on orders above ${money(business?.free_delivery_threshold || 0)}.`}</p>
               <div className="detail-list">
                 <span>
@@ -779,6 +759,7 @@ export default function Store({ initialProducts }) {
                       ? "Pay when your order arrives."
                       : "Bank transfer is pending. The store must confirm payment instructions before dispatch."}
                   </p>
+                  {confirmation.items?.filter(i=>i.measurement_data).map((i,n)=><div key={n}><h4>{i.name} · {i.variant}</h4><MeasurementsSummary data={i.measurement_data}/></div>)}
                   <p>{business?.brand_name} · {business?.return_address}</p><a className="text-link" href="/?policy=delivery">Shipping, returns & refunds policy</a>
                   <button className="gold-button" onClick={() => browse()}>
                     CONTINUE SHOPPING
@@ -857,6 +838,7 @@ export default function Store({ initialProducts }) {
                       </label>
                     </div>
                     <label>Postal code<input name="postal_code" required maxLength={15} autoComplete="postal-code" placeholder="e.g. 54000" /></label>
+                    <MeasurementCheckout items={items} fields={measurementFields} services={business?.measurement_services} drafts={measurements} setDrafts={setMeasurements}/>
                     <details className="checkout-policy"><summary>Shipping, returns & refunds</summary><StorePolicy business={business} kind="delivery"/></details>
                     <h3>Payment method</h3>
                     {payments.cod_enabled && (

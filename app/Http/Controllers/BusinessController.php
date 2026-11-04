@@ -19,7 +19,18 @@ class BusinessController extends Controller
         $rules['support_email'] = 'sometimes|nullable|email|max:190';
         $rules['brand_name'] = 'sometimes|required|string|max:100';
         $rules['tagline'] = 'sometimes|required|string|max:200';
+        foreach (['instagram_url','facebook_url','whatsapp_url'] as $field) $rules[$field] = ['sometimes','nullable','url:https','max:500'];
+        $rules['measurement_services'] = 'sometimes|array:blouse,saree,blouse_saree';
+        foreach (\App\Support\StitchingMeasurements::services() as $service=>$definition) {
+            $rules["measurement_services.$service"] = 'required_with:measurement_services|array:label,fields,required';
+            $rules["measurement_services.$service.label"] = 'required_with:measurement_services|string|max:80';
+            $rules["measurement_services.$service.fields"] = 'required_with:measurement_services|array|min:1';
+            $rules["measurement_services.$service.fields.*"] = ['string', \Illuminate\Validation\Rule::in(array_keys(\App\Support\StitchingMeasurements::fields()))];
+            $rules["measurement_services.$service.required"] = 'present_with:measurement_services|array';
+            $rules["measurement_services.$service.required.*"] = ['string', \Illuminate\Validation\Rule::in(array_keys(\App\Support\StitchingMeasurements::fields()))];
+        }
         $v = $r->validate($rules);
+        foreach ($v['measurement_services']??[] as $service) abort_if(count(array_diff($service['required'],$service['fields']))>0,422,'Required measurements must be enabled fields.');
         return DB::transaction(function () use ($v) {
             $row = DB::table('business_settings')->where('id', 1)->lockForUpdate()->first();
             $merged = array_replace(BusinessSettings::defaults(), json_decode($row->values, true), $v);

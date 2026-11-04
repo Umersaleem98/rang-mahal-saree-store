@@ -1,3 +1,4 @@
+import {MeasurementsSummary} from "./Stitching";
 "use client";
 import { useState, useEffect } from "react";
 import {
@@ -140,7 +141,7 @@ export default function Admin() {
   if (!user || !staffRoles.includes(user.role))
     return (
       <div className="admin-login">
-        <a className="wordmark" href="/">
+        <a className="wordmark admin-logo-lockup" href="/"><img src="/images/rang-mahal-couture-small.webp" alt="Rang Mahal" width="90" height="90"/>
           RANG MAHAL<span>STORE ADMINISTRATION</span>
         </a>
         <div className="login-card">
@@ -217,7 +218,7 @@ export default function Admin() {
   return (
     <div className="admin-shell">
       <aside className="admin-sidebar">
-        <a className="wordmark" href="/">
+        <a className="wordmark admin-logo-lockup" href="/"><img src="/images/rang-mahal-couture-small.webp" alt="Rang Mahal" width="90" height="90"/>
           RANG MAHAL<span>THE ADMIN SUITE</span>
         </a>
 
@@ -911,7 +912,7 @@ export default function Admin() {
               {lineItems.map((i) => (
                 <span key={i.id}>
                   {i.name} · {i.variant || "Unstitched"} × {i.quantity}
-                  <b>{money(i.price * i.quantity)}</b>
+                  <b>{money(i.price * i.quantity)}</b>{i.measurement_data&&<MeasurementsSummary data={i.measurement_data}/>}
                 </span>
               ))}
               <span>

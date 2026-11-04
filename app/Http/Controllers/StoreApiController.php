@@ -34,7 +34,7 @@ class StoreApiController extends Controller
         if (Auth::check() && (! Auth::user()->active || $r->session()->get('auth_version') !== Auth::user()->auth_version)) {
             Auth::logout(); $r->session()->invalidate(); $r->session()->regenerateToken();
         }
-        if ($path === 'catalog' && $method === 'GET') return response()->json(['products' => StoreCatalog::products(), 'categories' => DB::table('categories')->pluck('name'), 'brands' => DB::table('brands')->pluck('name'), 'demo' => false, 'payments' => $this->payments(), 'business' => BusinessSettings::get()]);
+        if ($path === 'catalog' && $method === 'GET') return response()->json(['products' => StoreCatalog::products(), 'categories' => DB::table('categories')->pluck('name'), 'brands' => DB::table('brands')->pluck('name'), 'stitching_fields' => \App\Support\StitchingMeasurements::fields(), 'demo' => false, 'payments' => $this->payments(), 'business' => BusinessSettings::get()]);
         if ($path === 'auth' && $method === 'GET') return response()->json(['user' => $this->identity(), 'google_enabled' => false]);
         if ($path === 'settings' && $method === 'GET') return response()->json(['payments' => $this->payments(), 'business' => BusinessSettings::get(), 'google_enabled' => false]);
         if ($path === 'auth/register') abort(404);
@@ -161,7 +161,7 @@ class StoreApiController extends Controller
             'price' => 'required|numeric|decimal:0,2|min:1|max:10000000', 'compare_price' => 'nullable|numeric|decimal:0,2|min:0|max:10000000', 'stock' => 'required|integer|min:0|max:1000000',
             'color' => 'nullable|string|max:50', 'fabric' => 'nullable|string|max:100', 'badge' => 'nullable|string|max:50', 'description' => 'nullable|string|max:10000',
             'image' => ['required', ...$imageRule], 'images' => 'sometimes|array|min:1|max:4', 'images.*' => $imageRule, 'featured' => 'sometimes|boolean',
-            'sku' => ['nullable', 'string', 'max:80', Rule::unique('products')->ignore($r->id)], 'stitching_enabled' => 'sometimes|boolean', 'stitching_stock_mode' => 'sometimes|in:shared,separate', 'stitching_charge' => 'nullable|numeric|decimal:0,2|min:0|max:10000000',
+            'sku' => ['nullable', 'string', 'max:80', Rule::unique('products')->ignore($r->id)], 'stitching_enabled' => 'sometimes|boolean', 'stitching_service' => 'sometimes|in:blouse,saree,blouse_saree', 'stitching_stock_mode' => 'sometimes|in:shared,separate', 'stitching_charge' => 'nullable|numeric|decimal:0,2|min:0|max:10000000',
             'cost_price' => 'nullable|numeric|decimal:0,2|min:0|max:10000000', 'stitching_cost' => 'nullable|numeric|decimal:0,2|min:0|max:10000000', 'additional_cost' => 'nullable|numeric|decimal:0,2|min:0|max:10000000',
             'shipping_info' => 'nullable|string|max:1000', 'seo_title' => 'nullable|string|max:160', 'seo_description' => 'nullable|string|max:320',
             'variants' => 'sometimes|array|min:1|max:2', 'variants.*.type' => 'required|distinct|in:Stitched,Unstitched',
@@ -171,8 +171,8 @@ class StoreApiController extends Controller
         return DB::transaction(function () use ($v, $creating, $can) {
             foreach (['cost_price', 'stitching_cost', 'additional_cost'] as $field) abort_if(array_key_exists($field, $v) && ! $can('costs.manage'), 403, 'Cost permission required.');
             $old = $creating ? null : DB::table('products')->where('id', $v['id'])->lockForUpdate()->first();
-            foreach (['stitching_charge', 'stitching_enabled', 'stitching_stock_mode'] as $field) {
-                $before = $old?->$field ?? match ($field) { 'stitching_enabled' => true, 'stitching_stock_mode' => 'shared', default => null };
+            foreach (['stitching_charge', 'stitching_enabled', 'stitching_stock_mode', 'stitching_service'] as $field) {
+                $before = $old?->$field ?? match ($field) { 'stitching_enabled' => true, 'stitching_stock_mode' => 'shared', 'stitching_service' => 'blouse', default => null };
                 $changed = array_key_exists($field, $v) && ($field === 'stitching_enabled' ? (bool) $v[$field] !== (bool) $before : $v[$field] != $before);
                 abort_if($changed && ! $can('sales.manage'), 403, 'Stitching configuration permission required.');
             }

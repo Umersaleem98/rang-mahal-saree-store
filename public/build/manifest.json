@@ -1,6 +1,6 @@
 {
   "resources/js/app.jsx": {
-    "file": "assets/app-Ci-xFRFu.js",
+    "file": "assets/app-qdshPQ3e.js",
     "name": "app",
     "src": "resources/js/app.jsx",
     "isEntry": true,
@@ -8,11 +8,11 @@
       "resources/js/components/Admin.jsx"
     ],
     "css": [
-      "assets/app-BV1tnWB0.css"
+      "assets/app-PxIUfnsH.css"
     ]
   },
   "resources/js/components/Admin.jsx": {
-    "file": "assets/Admin-Cqr8tx1t.js",
+    "file": "assets/Admin-D780Gpg4.js",
     "name": "Admin",
     "src": "resources/js/components/Admin.jsx",
     "isDynamicEntry": true,

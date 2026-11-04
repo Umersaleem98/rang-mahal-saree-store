@@ -12,8 +12,8 @@
     <meta property="og:locale" content="en_PK">
     <meta property="og:image" content="{{ url('/images/campaign.jpg') }}">
     <meta name="twitter:card" content="summary_large_image">
-    <link rel="icon" type="image/png" sizes="32x32" href="/images/rang-mahal-icon-32.png?v=4">
-    <link rel="icon" href="/favicon.ico?v=4" sizes="any">
+    <link rel="icon" type="image/png" sizes="32x32" href="/images/rang-mahal-icon-32.png?v=5">
+    <link rel="icon" href="/favicon.ico?v=5" sizes="any">
     <link rel="apple-touch-icon" sizes="180x180" href="/images/rang-mahal-apple-touch.png">
     <link rel="canonical" href="{{ url()->current() }}">
     @if(request()->is('admin'))<meta name="robots" content="noindex,nofollow">@endif
