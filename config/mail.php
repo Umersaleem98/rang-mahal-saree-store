@@ -38,9 +38,10 @@ return [
     'mailers' => [
         // GoDaddy cPanel authorizes relay by the hosting account; never send mailbox credentials to it.
         'hosting' => [
-            'transport' => 'smtp',
+            'transport' => 'hosting_smtp',
             'scheme' => 'smtp',
-            'host' => env('MAIL_HOSTING_HOST', 'sg2plzcpnl509375.prod.sin2.secureserver.net'),
+            'host' => '127.0.0.1',
+            'tls_peer_name' => env('MAIL_HOSTING_HOST', 'sg2plzcpnl509375.prod.sin2.secureserver.net'),
             'port' => (int) env('MAIL_HOSTING_PORT', 25),
             'username' => null,
             'password' => null,
