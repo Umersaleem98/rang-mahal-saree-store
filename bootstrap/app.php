@@ -26,7 +26,7 @@ return Application::configure(basePath: dirname(__DIR__))
                 return response()->json(['error' => collect($e->errors())->flatten()->first(), 'errors' => $e->errors()], 422);
             }
             if ($e instanceof \Illuminate\Http\Exceptions\PostTooLargeException) {
-                return response()->json(['error' => 'Upload is too large. Use up to four images, each at most 4 MB.'], 413);
+                return response()->json(['error' => 'Upload exceeds the server limit. Try one file at a time within the displayed image or video limits.'], 413);
             }
             if ($e instanceof QueryException) {
                 report($e);
