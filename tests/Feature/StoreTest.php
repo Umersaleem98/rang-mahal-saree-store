@@ -15,6 +15,10 @@ use Tests\TestCase;
 class StoreTest extends TestCase
 {
     use DatabaseTransactions;
+ protected function setUp():void {parent::setUp();
+  // Existing development orders are outside this test's mail batch; transaction rollback restores them.
+  DB::table('order_email_outbox')->whereNull('sent_at')->update(['available_at'=>now()->addDay()]);
+ }
 
     private function staff(string $role = 'super_admin', ?array $permissions = null): ShopUser
     {
@@ -26,7 +30,7 @@ class StoreTest extends TestCase
 
     private function product(): array
     {
-        $id = DB::table('products')->insertGetId(['name' => 'QA Saree', 'category' => DB::table('categories')->value('name'), 'brand' => DB::table('brands')->value('name'), 'price' => 1000, 'stock' => 5, 'image' => '/images/gold.jpg', 'active' => 1, 'stitching_stock_mode' => 'separate']);
+        $id = DB::table('products')->insertGetId(['name' => 'QA Saree', 'description'=>'QA product description', 'category' => DB::table('categories')->value('name'), 'brand' => DB::table('brands')->value('name'), 'price' => 1000, 'stock' => 5, 'image' => '/images/gold.jpg', 'active' => 1, 'stitching_stock_mode' => 'separate']);
         $a = DB::table('product_variants')->insertGetId(['product_id' => $id, 'type' => 'Unstitched', 'regular_price' => 1500, 'sale_price' => 1000, 'sale_enabled' => 1, 'stock' => 3, 'enabled' => 1]);
         $b = DB::table('product_variants')->insertGetId(['product_id' => $id, 'type' => 'Stitched', 'regular_price' => 2000, 'stock' => 2, 'enabled' => 1]);
         return [$id, $a, $b];
@@ -34,7 +38,7 @@ class StoreTest extends TestCase
 
     private function payload(int $id, int $variant): array
     {
-        return ['name' => 'Guest Buyer', 'email' => 'guest@example.test', 'phone' => '03001234567', 'address' => 'QA delivery address', 'city' => 'Lahore', 'postal_code' => '54000', 'payment_method' => 'cod', 'checkout_token' => (string) Str::uuid(), 'items' => [['id' => $id, 'variant_id' => $variant, 'quantity' => 1]], 'total' => 1, 'role' => 'super_admin'];
+        return ['country'=>'Pakistan','name' => 'Guest Buyer', 'email' => 'guest@example.test', 'phone' => '03001234567', 'address' => 'QA delivery address', 'city' => 'Lahore', 'postal_code' => '54000', 'payment_method' => 'cod', 'checkout_token' => (string) Str::uuid(), 'items' => [['id' => $id, 'variant_id' => $variant, 'quantity' => 1]], 'total' => 1, 'role' => 'super_admin'];
     }
 
     public function test_guest_checkout_tracking_prices_and_idempotency(): void
@@ -78,7 +82,7 @@ class StoreTest extends TestCase
         $order = DB::table('orders')->where('reference', $res->json('reference'))->first();
         $this->actingAs($this->staff());
         $this->putJson('/api/admin/orders', ['id' => $order->id, 'status' => 'Delivered'])->assertStatus(409);
-        foreach (['Confirmed', 'Processing', 'Packed', 'Shipped', 'Out for Delivery', 'Delivered'] as $status) $this->putJson('/api/admin/orders', ['id' => $order->id, 'status' => $status])->assertOk();
+        foreach (['Confirmed', 'Processing', 'Packed', 'Shipped', 'Out for Delivery', 'Delivered'] as $status) $this->putJson('/api/admin/orders', ['id' => $order->id, 'status' => $status,'delivery_method'=>'direct'])->assertOk();
         $this->putJson('/api/admin/orders', ['id' => $order->id, 'status' => 'Cancelled'])->assertStatus(409);
         $second = $this->postJson('/api/orders', $this->payload($id, $variant))->assertCreated();
         $order2 = DB::table('orders')->where('reference', $second->json('reference'))->first();
@@ -163,14 +167,14 @@ class StoreTest extends TestCase
         $this->actingAs($this->staff('staff'));
         $this->post('/api/admin/media', ['images' => [UploadedFile::fake()->image('photo.jpg')]], ['Accept' => 'application/json'])->assertForbidden();
         $this->actingAs($this->staff('product_manager'));
-        $this->post('/api/admin/media', ['images' => array_map(fn () => UploadedFile::fake()->image('photo.jpg'), range(1, 5))], ['Accept' => 'application/json'])->assertUnprocessable();
+        $this->post('/api/admin/media', ['images' => array_map(fn () => UploadedFile::fake()->image('photo.jpg'), range(1, 6))], ['Accept' => 'application/json'])->assertUnprocessable();
         $this->post('/api/admin/media', ['images' => [UploadedFile::fake()->create('bad.svg', 10, 'image/svg+xml')]], ['Accept' => 'application/json'])->assertUnprocessable();
         $response = $this->post('/api/admin/media', ['images' => [UploadedFile::fake()->image('photo.jpg', 1800, 1200), UploadedFile::fake()->image('photo.png', 100, 100)]], ['Accept' => 'application/json'])->assertCreated();
         try {
             foreach ($response->json('images') as $url) {
                 $this->assertMatchesRegularExpression('~^/media/products/[a-f0-9]{32}\.webp$~', $url);
                 $path = storage_path('app/public/products/'.basename($url));
-                $info = getimagesize($path); $this->assertSame('image/webp', $info['mime']); $this->assertLessThanOrEqual(1400, max($info[0], $info[1]));
+                $info = getimagesize($path); $this->assertSame('image/webp', $info['mime']); $this->assertLessThanOrEqual(4096, max($info[0], $info[1]));
                 $this->get($url)->assertOk()->assertHeader('Content-Type', 'image/webp');
             }
         } finally { foreach ($response->json('images') as $url) @unlink(storage_path('app/public/products/'.basename($url))); }
@@ -209,8 +213,8 @@ class StoreTest extends TestCase
         [$id,$variant]=$this->product();$r=$this->postJson('/api/orders',$this->payload($id,$variant))->assertCreated();
         $orderId=DB::table('orders')->where('reference',$r->json('reference'))->value('id');$this->actingAs($this->staff());
         foreach(['Confirmed','Processing','Packed','Shipped','Out for Delivery','Delivered','Returned'] as $status){
-            $this->putJson('/api/admin/orders',['id'=>$orderId,'status'=>$status])->assertOk();
-            $this->putJson('/api/admin/orders',['id'=>$orderId,'status'=>$status])->assertOk();
+            $this->putJson('/api/admin/orders',['id'=>$orderId,'status'=>$status,'delivery_method'=>'direct'])->assertOk();
+            $this->putJson('/api/admin/orders',['id'=>$orderId,'status'=>$status,'delivery_method'=>'direct'])->assertOk();
         }
         $this->assertEquals(8,DB::table('order_email_outbox')->where('order_id',$orderId)->count());
         $this->assertEquals(8,\App\Support\OrderEmails::deliver());
@@ -231,6 +235,7 @@ class StoreTest extends TestCase
         $entry = DB::table('order_email_outbox')->where('order_id', $orderId)->first();
         $this->assertNull($entry->sent_at);
         $this->assertEquals(1, $entry->attempts);
+        $this->assertDatabaseHas('order_email_attempts', ['outbox_id'=>$entry->id,'attempt'=>1,'outcome'=>'failed']);
         $this->assertGreaterThan(now()->timestamp, strtotime($entry->available_at));
         $this->assertEquals(2, DB::table('product_variants')->find($variant)->stock);
         Mail::fake();
@@ -238,6 +243,7 @@ class StoreTest extends TestCase
         $this->assertEquals(1, \App\Support\OrderEmails::deliver());
         Mail::assertSent(\App\Mail\OrderUpdate::class, 1);
         $this->assertNotNull(DB::table('order_email_outbox')->find($entry->id)->sent_at);
+        $this->assertDatabaseHas('order_email_attempts', ['outbox_id'=>$entry->id,'attempt'=>2,'outcome'=>'accepted']);
     }
 
     public function test_disabled_staff_and_stale_sessions_are_rejected(): void

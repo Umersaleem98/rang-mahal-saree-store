@@ -22,7 +22,7 @@ class OrderUpdate extends Mailable {
   if($this->details['event']!=='status')return 'Your shipping or payment details have changed. Please review the latest recorded information below.';
   return match($this->details['order']['status']) {
    'Confirmed'=>'Our team has confirmed your order. You can follow its progress using your tracking ID.',
-   'Processing'=>'Our team is preparing your selection. If you selected stitching, the measurements submitted at checkout will be used for your order.',
+   'Processing'=>'Our team is preparing your selection. Your selected garment sizes are recorded with your order.',
    'Packed'=>'Your order has been packed and is awaiting dispatch.',
    'Shipped'=>'Your order has been marked dispatched. Courier details appear below when assigned.',
    'Out for Delivery'=>'Your order has been marked out for delivery. Please keep your phone available for the courier.',

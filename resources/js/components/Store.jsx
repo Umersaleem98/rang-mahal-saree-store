@@ -22,7 +22,9 @@ import {
   SlidersHorizontal,
 } from "lucide-react";
 import {StorePolicy,TrackingDetails,initialBusiness} from "./StoreBusiness";
-import {MeasurementCheckout,MeasurementsSummary,cmToUnit} from "./Stitching";
+import {MeasurementsSummary} from "./Stitching";
+import {SizeGuide,SizeSelection} from "./Sizing";
+import ProductGallery from "./ProductGallery";
 import { money } from "../lib/catalog.mjs";
 import { defaultPayments } from "../lib/settings-client.mjs";
 const WhatsAppIcon=()=> <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" aria-hidden="true"><path d="M21 11.5a9 9 0 0 1-13.4 7.9L3 21l1.6-4.6A9 9 0 1 1 21 11.5Z"/><path d="M8 7c-2 3 3 8 6 8l2-2-3-1-1 1c-1.5-.7-2.3-1.5-3-3l1-1-1-2Z"/></svg>;
@@ -45,7 +47,7 @@ async function api(path, body) {
   const d = await r.json();
   if (!r.ok) {
     const error = Error(d.error || Object.values(d.errors || {}).flat()[0] || d.message || "Please try again.");
-    error.status = r.status;
+    error.status = r.status; error.fields=d.errors||{};
     throw error;
   }
   return d;
@@ -69,13 +71,14 @@ export default function Store({ initialProducts }) {
     [tracked, setTracked] = useState(null),
     [mobile, setMobile] = useState(false),
     [brand, setBrand] = useState("All brands");
-  const [measurementFields,setMeasurementFields]=useState({});
-  const [measurements,setMeasurements]=useState({});
+  const [sizeReference,setSizeReference]=useState(null);
+  const [chosenSize,setChosenSize]=useState("");
+  const [fieldErrors,setFieldErrors]=useState({});
   const [galleryIndex, setGalleryIndex] = useState(0);
   const [chosenVariant, setChosenVariant] = useState(null);
   const [trackingReference, setTrackingReference] = useState("");
   const [checkoutToken, setCheckoutToken] = useState(() => crypto.randomUUID());
-  useEffect(() => { setGalleryIndex(0); setChosenVariant(selected?.variants?.find(v => v.enabled && v.stock > 0)?.id ?? null); }, [selected]);
+  useEffect(() => { setGalleryIndex(0);setChosenSize(""); setChosenVariant(selected?.variants?.find(v => v.available)?.id ?? null); }, [selected]);
   const [business,setBusiness] = useState(initialBusiness);
   const [payments, setPayments] = useState(defaultPayments);
   useEffect(() => {
@@ -86,7 +89,7 @@ export default function Store({ initialProducts }) {
     setReady(true);
     api("catalog").then((d) => {
       setProducts(d.products);
-      setMeasurementFields(d.stitching_fields||{});
+      setSizeReference(d.size_reference);
       if(d.business)setBusiness(d.business);
       const productId=location.pathname.match(/^\/products\/(\d+)$/)?.[1];if(productId)setSelected(d.products.find(p=>p.id===Number(productId))||null);
       setSelected(previous=>previous?d.products.find(p=>p.id===previous.id)||null:null);
@@ -185,7 +188,7 @@ export default function Store({ initialProducts }) {
   const items = bag.map((i) => {
     const base = products.find((p) => p.id === i.id);
     const variant = base?.variants?.find(v => v.id === i.variant_id) || (!i.variant_id ? base?.variants?.find(v => v.type === "Unstitched") : null);
-    return { ...i, variant_id: variant?.id, variant, product: base && variant ? { ...base, price: variant.price, stock: variant.enabled ? variant.stock : 0 } : null };
+    return { ...i,line_key:`${variant?.id}:${i.selected_size||'-'}`, variant_id: variant?.id, variant, product: base && variant ? { ...base, price: variant.price, stock: variant.available ? variant.stock : 0 } : null };
   }).filter(i => i.product),
     subtotal = items.reduce((a, i) => a + i.product.price * i.quantity, 0),
     shipping = business && subtotal <= Number(business.free_delivery_threshold) ? Number(business.standard_delivery_charge) : 0,
@@ -225,18 +228,17 @@ export default function Store({ initialProducts }) {
       50,
     );
   }
-  function add(p, variantId) {
-    if (!p.variants) { setToast("The collection is loading. Please try again in a moment."); return; }
-    const options = p.variants?.filter(v => v.enabled) || [];
-    const variant = options.find(v => v.id === variantId) || (!variantId && options.length === 1 ? options[0] : null);
-    if (!variant) { setSelected(p); return; }
-    const existing = bag.find(i => i.id === p.id && (i.variant_id === variant.id || (!i.variant_id && variant.type === "Unstitched")))?.quantity || 0;
-    if (existing >= variant.stock || existing >= 20) { setToast("No more of this option is available."); return; }
-    setBag(b => b.some(i => i.id === p.id && (i.variant_id === variant.id || (!i.variant_id && variant.type === "Unstitched")))
-      ? b.map(i => i.id === p.id && (i.variant_id === variant.id || (!i.variant_id && variant.type === "Unstitched")) ? { ...i, variant_id: variant.id, quantity: i.quantity + 1 } : i)
-      : [...b, { id: p.id, variant_id: variant.id, quantity: 1 }]);
-    setSelected(null); setPanel("bag");
+  function add(p,variantId,size=''){
+    const options=p.variants?.filter(v=>v.enabled)||[];const variant=options.find(v=>v.id===variantId)||(!variantId&&options.length===1?options[0]:null);
+    if(!variant){setSelected(p);return;}
+    const selected_size=variant.type==='Stitched'?size:null;
+    if(variant.type==='Stitched'&&!(p.size_options||[]).includes(selected_size)){setError('Please select a standard size before adding to your bag.');return;}
+    const existing=bag.filter(i=>i.variant_id===variant.id).reduce((sum,i)=>sum+i.quantity,0);
+    if(!variant.available||existing>=20||(variant.stock!==null&&existing>=variant.stock)){setToast('No more of this option is available.');return;}
+    setBag(prev=>prev.some(i=>i.variant_id===variant.id&&(i.selected_size||null)===selected_size)?prev.map(i=>i.variant_id===variant.id&&(i.selected_size||null)===selected_size?{...i,quantity:i.quantity+1}:i):[...prev,{id:p.id,variant_id:variant.id,selected_size,quantity:1}]);setSelected(null);setPanel('bag');
   }
+  function resizeBag(line,size){setBag(prev=>{const changed=prev.map(i=>i.variant_id===line.variant_id&&(i.selected_size||'')===(line.selected_size||'')?{...i,selected_size:size}:i);const merged=new Map();for(const i of changed){const k=`${i.variant_id}:${i.selected_size||'-'}`;merged.set(k,merged.has(k)?{...i,quantity:merged.get(k).quantity+i.quantity}:i);}return [...merged.values()];});}
+  const FieldError=({name})=>fieldErrors[name]?<span className="field-error" role="alert" id={`error-${name}`}>{fieldErrors[name]}</span>:null;
   function toggleWish(id) {
     setWish((v) => (v.includes(id) ? v.filter((x) => x !== id) : [...v, id]));
   }
@@ -245,24 +247,32 @@ export default function Store({ initialProducts }) {
     setError("");
     setBusy(true);
     try {
-      const b = Object.fromEntries(new FormData(e.currentTarget));
-      const d = await api(path, path === "orders" ? { ...b, checkout_token: checkoutToken, items: items.map(i => {const d=measurements[i.variant_id]||{unit:'cm',values:{}};return {id:i.id,variant_id:i.variant_id,quantity:i.quantity,...(i.variant?.type==='Stitched'?{measurements:{unit:d.unit,values:Object.fromEntries(Object.entries(d.values).filter(([,v])=>v!==''&&v!=null).map(([k,v])=>[k,cmToUnit(v,d.unit)])),fit:d.fit||'Regular',instructions:d.instructions||''}}:{})};}) } : b);
+      const form=e.currentTarget,b=Object.fromEntries(new FormData(form));
+      if(path==='orders'){
+        const errors={};for(const key of ['name','phone','email','address','country','city','postal_code'])if(!String(b[key]||'').trim())errors[key]='This field is required.';
+        if(b.email&&!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(b.email))errors.email='Enter a valid email address.';
+        if(b.phone&&!/^\+?[\d\s-]{10,20}$/.test(b.phone))errors.phone='Enter a valid phone number.';
+        if(b.postal_code&&!/^[A-Za-z0-9 -]{3,15}$/.test(b.postal_code))errors.postal_code='Enter a valid postal code (3–15 characters).';
+        setFieldErrors(errors);if(Object.keys(errors).length){form.elements.namedItem(Object.keys(errors)[0])?.focus();throw Error('Please complete the highlighted checkout fields.');}
+        if(items.some(i=>i.variant.type==='Stitched'&&!(i.product.size_options||[]).includes(i.selected_size)))throw Error('Choose an available standard size for each stitched item in your bag.');
+      }
+      const d=await api(path,path==='orders'?{...b,checkout_token:checkoutToken,items:items.map(i=>({id:i.id,variant_id:i.variant_id,quantity:i.quantity,selected_size:i.selected_size||null}))}:b);
       if (path === "orders") {
         setConfirmation(d);
         setCheckoutToken(crypto.randomUUID());
-        setBag([]); setMeasurements({});
+        setBag([]);setFieldErrors({});
         api("catalog").then((d) => setProducts(d.products));
       }
       if (path === "track") setTracked(d.order);
     } catch (e) {
-      setError(e.message);
+      if(e.fields)setFieldErrors(Object.fromEntries(Object.entries(e.fields).map(([k,v])=>[k,Array.isArray(v)?v[0]:v])));setError(e.message);
     } finally {
       setBusy(false);
     }
   }
   async function beginCheckout() {
     setBusy(true); setConfirmation(null); setCheckoutToken(crypto.randomUUID());
-    try { const settings = await api("catalog"); setPayments(settings.payments); setProducts(settings.products); setBusiness(settings.business); setMeasurementFields(settings.stitching_fields||{}); setPanel("checkout"); }
+    try { const settings = await api("catalog"); setPayments(settings.payments); setProducts(settings.products); setBusiness(settings.business); setSizeReference(settings.size_reference); setPanel("checkout"); }
     catch (e) { setError(e.message); } finally { setBusy(false); }
   }
   function account() { location.assign("/track"); }
@@ -302,14 +312,14 @@ export default function Store({ initialProducts }) {
                     </IconButton>
                     <button
                       className="quick-add"
-                      disabled={!p.stock}
+                      disabled={!p.variants?.some(v=>v.available)}
                       onClick={() => add(p)}
                     >
-                      {p.stock ? "ADD TO BAG" : "SOLD OUT"} <Plus size={16} />
+                      {p.variants?.some(v=>v.available) ? "ADD TO BAG" : "SOLD OUT"} <Plus size={16} />
                     </button>
                   </div>
                   <div className="product-meta">
-                    <span>{p.fabric} · {p.stock ? `Only ${p.stock} Pieces Left` : "Out of stock"}</span>
+                    <span>{p.fabric} · {p.inventory_tracking===false?"Available to order":p.stock ? `Only ${p.stock} Pieces Left` : "Out of stock"}</span>
                     <span
                       className={"swatch " + (p.color || "").toLowerCase()}
                       title={p.color}
@@ -489,7 +499,7 @@ export default function Store({ initialProducts }) {
             </div>
             <div>
               <h4>HERE TO HELP</h4>
-              {business?.support_email && <a href={`mailto:${business.support_email}`}>{business.support_email}</a>}
+
               <button
                 onClick={() => {
                   setTracked(null);
@@ -505,7 +515,7 @@ export default function Store({ initialProducts }) {
               <button onClick={()=>setPanel("payment")}>Payment information</button>
             </div>
           </div>
-          <section className="footer-social wrap" aria-label="Follow Us on Social Media"><h4>Follow Us on Social Media</h4><div><a href={business?.instagram_url} target="_blank" rel="noopener noreferrer"><Instagram size={20}/>Instagram</a><a href={business?.facebook_url} target="_blank" rel="noopener noreferrer"><Facebook size={20}/>Facebook</a>{business?.whatsapp_url?<a href={business.whatsapp_url} target="_blank" rel="noopener noreferrer"><WhatsAppIcon/>WhatsApp</a>:<button disabled title="WhatsApp contact will be available soon"><WhatsAppIcon/>WhatsApp <small>Coming soon</small></button>}</div></section>
+          <section className="footer-social wrap" aria-label="Follow Us on Social Media">{business?.support_email&&<p className="footer-contact">Contact us on: <a href={`mailto:${business.support_email}`}>{business.support_email}</a></p>}<h4>Follow Us on Social Media</h4><div><a href={business?.instagram_url} target="_blank" rel="noopener noreferrer"><Instagram size={20}/>Instagram</a><a href={business?.facebook_url} target="_blank" rel="noopener noreferrer"><Facebook size={20}/>Facebook</a>{business?.whatsapp_url?<a href={business.whatsapp_url} target="_blank" rel="noopener noreferrer"><WhatsAppIcon/>WhatsApp</a>:<button disabled title="WhatsApp contact will be available soon"><WhatsAppIcon/>WhatsApp <small>Coming soon</small></button>}</div></section>
           <div className="footer-bottom wrap">
             <span>
               © {new Date().getFullYear()} Rang Mahal. All rights reserved.
@@ -537,14 +547,13 @@ export default function Store({ initialProducts }) {
             >
               <X />
             </IconButton>
-            <div className="product-gallery"><img src={selectedImages[galleryIndex] || selected.image} alt={selected.name} />
-              <div className="gallery-thumbnails">{selectedImages.map((src,i)=><button key={src} aria-label={"Product image "+(i+1)} aria-pressed={i===galleryIndex} onClick={()=>setGalleryIndex(i)}><img src={src} alt="" /></button>)}</div></div>
+            <ProductGallery product={selected}/>
             <div className="product-detail">
               <div className="eyebrow">{selected.brand}</div>
               <h2>{selected.name}</h2>
               <div className="price">{money(selectedOption?.price ?? selected.price)} {selectedOption?.discount > 0 && <><del>{money(selectedOption.regular_price)}</del><span className="sale-label">{selectedOption.discount}% OFF</span></>}</div>
-              <fieldset className="variant-picker"><legend>Choose your option</legend>{["Unstitched","Stitched"].map(type=>{const v=selected.variants?.find(v=>v.type===type);return <label key={type} className={!v?.enabled || !v.stock ? "unavailable" : ""}><input type="radio" name="variant" value={v?.id || ""} checked={v?.id === chosenVariant} disabled={!v?.enabled || !v.stock} onChange={()=>setChosenVariant(v.id)} />{type}<span>{v?.enabled ? money(v.price) : "Unavailable"} · {v?.enabled ? v.stock+" Pieces Left" : "Not offered"}</span></label>;})}</fieldset>
-              {selectedOption?.type==='Stitched'&&<aside className="stitching-notice" role="status"><strong>Your Perfect Fit, Made Just for You!</strong><p>Your measurements will be collected at checkout to ensure your saree is stitched according to your preferred fit. Please proceed to checkout to provide your measurements.</p></aside>}
+              <fieldset className="variant-picker"><legend>Choose your option</legend>{["Unstitched","Stitched"].map(type=>{const v=selected.variants?.find(v=>v.type===type);return <label key={type} className={!v?.available ? "unavailable" : ""}><input type="radio" name="variant" value={v?.id || ""} checked={v?.id === chosenVariant} disabled={!v?.available} onChange={()=>setChosenVariant(v.id)} />{type}<span>{v?.enabled ? money(v.price) : "Unavailable"} · {v?.enabled ? v.stock===null?"Available to order":v.stock+" Pieces Left" : "Not offered"}</span></label>;})}</fieldset>
+              {selectedOption?.type==='Stitched'&&<><SizeSelection sizes={selected.size_options} value={chosenSize} onChange={setChosenSize}/><SizeGuide chart={selected.effective_size_chart} reference={sizeReference} notes={selected.sizing_notes}/></>}
               <p>{selected.description}</p><p className="product-shipping">{selected.shipping_info || `Delivery ${money(business?.standard_delivery_charge || 0)}. Free on orders above ${money(business?.free_delivery_threshold || 0)}.`}</p>
               <div className="detail-list">
                 <span>
@@ -554,16 +563,16 @@ export default function Store({ initialProducts }) {
                   Colour <b>{selected.color}</b>
                 </span>
                 <span>
-                  Length <b>Approx. 6.3 m, including blouse</b>
+                  Length <b>{selected.sizing_notes||"See Size Guide for configured dimensions"}</b>
                 </span>
                 <span>
-                  Availability <b>{selectedOption?.stock ? `Only ${selectedOption.stock} Pieces Left` : "Sold out"}</b>
+                  Availability <b>{selectedOption?.available ? selectedOption.stock===null?"Available to order":`Only ${selectedOption.stock} Pieces Left` : "Sold out"}</b>
                 </span>
               </div>
               <button
                 className="gold-button"
-                disabled={!selectedOption?.stock}
-                onClick={() => add(selected, chosenVariant)}
+                disabled={!selectedOption?.available||(selectedOption?.type==='Stitched'&&!chosenSize)}
+                onClick={() => add(selected, chosenVariant,chosenSize)}
               >
                 ADD TO BAG <ShoppingBag size={17} />
               </button>
@@ -655,12 +664,13 @@ export default function Store({ initialProducts }) {
                       {shipping === 0 ? "Your order qualifies for free delivery." : `Free delivery on orders above ${money(business?.free_delivery_threshold || 0)}.`}
                     </div>
                     {items.map((i) => (
-                      <div className="bag-item" key={i.variant_id}>
+                      <div className="bag-item" key={i.line_key}>
                         <img src={i.product.image} alt={i.product.name} />
                         <div>
                           <h3>{i.product.name}</h3>
                           <p>
-                            {i.variant?.type} · {i.product.color} · {i.product.fabric}
+                            {i.variant?.type} {i.selected_size&&`· Size ${i.selected_size}`} · {i.product.color} · {i.product.fabric}
+                            {i.variant?.type==='Stitched'&&<label className="bag-size">Size<select aria-label={`Size for ${i.product.name}`} value={i.selected_size||''} onChange={e=>resizeBag(i,e.target.value)}><option value="">Choose size</option>{i.product.size_options.map(size=><option key={size}>{size}</option>)}</select></label>}
                           </p>
                           <b>{money(i.product.price)}</b>
                           <div className="quantity">
@@ -670,7 +680,7 @@ export default function Store({ initialProducts }) {
                                 setBag((b) =>
                                   b
                                     .map((x) =>
-                                      (x.variant_id === i.variant_id || (!x.variant_id && x.id === i.id))
+                                      (x.variant_id === i.variant_id && (x.selected_size||null)===(i.selected_size||null))
                                         ? { ...x, quantity: x.quantity - 1 }
                                         : x,
                                     )
@@ -683,7 +693,7 @@ export default function Store({ initialProducts }) {
                             <span>{i.quantity}</span>
                             <IconButton
                               label="Increase quantity"
-                              onClick={() => add(i.product, i.variant_id)}
+                              onClick={() => add(i.product, i.variant_id,i.selected_size)}
                             >
                               <Plus size={13} />
                             </IconButton>
@@ -692,7 +702,7 @@ export default function Store({ initialProducts }) {
                         <IconButton
                           label="Remove item"
                           onClick={() =>
-                            setBag((b) => b.filter((x) => !(x.variant_id === i.variant_id || (!x.variant_id && x.id === i.id))))
+                            setBag((b) => b.filter((x) => !(x.variant_id === i.variant_id && (x.selected_size||null)===(i.selected_size||null))))
                           }
                         >
                           <X size={16} />
@@ -751,7 +761,7 @@ export default function Store({ initialProducts }) {
                   </p>
                   <strong className="tracking-id">{confirmation.reference}</strong>
                   <button type="button" className="outline-button" onClick={() => {setTrackingReference(confirmation.reference);setTracked(null);setPanel("track");}}>TRACK THIS ORDER</button>
-                  {confirmation.items?.map((i,n)=><p key={n}>{i.name} · {i.variant} × {i.quantity} — {money(i.price*i.quantity)}{Number(i.stitching_charge)>0 && ` (stitching included: ${money(i.stitching_charge)} per piece)`}</p>)}
+                  {confirmation.items?.map((i,n)=><p key={n}>{i.name} · {i.variant} {i.selected_size&&`· Size ${i.selected_size}`} × {i.quantity} — {money(i.price*i.quantity)}{Number(i.stitching_charge)>0 && ` (stitching included: ${money(i.stitching_charge)} per piece)`}</p>)}
                   <p>
                     Delivery: {money(confirmation.shipping)}<br/>Total: {money(confirmation.total)}
                     <br />
@@ -776,69 +786,69 @@ export default function Store({ initialProducts }) {
                       available after the XAMPP database is configured.
                     </div>
                   )}
-                  <form
+                  <form noValidate
                     onSubmit={(e) => submit(e, "orders")}
                     className="checkout-form"
                   >
                     <div className="form-grid">
                       <label>
-                        Full name
+                        Full name *
                         <input
                           required
                           name="name"
                           maxLength={100}
                           autoComplete="name"
                           defaultValue=""
-                        />
+                         aria-invalid={!!fieldErrors.name} aria-describedby="error-name"/><FieldError name="name"/>
                       </label>
                       <label>
-                        Phone number
+                        Phone number *
                         <input
                           required
-                          name="phone"
+                          name="phone" type="tel" inputMode="tel"
                           placeholder="0300 1234567"
                           autoComplete="tel"
-                        />
+                         aria-invalid={!!fieldErrors.phone} aria-describedby="error-phone"/><FieldError name="phone"/>
                       </label>
                     </div>
                     <label>
-                      Email
+                      Email address *
                       <input
                         required
                         type="email"
                         name="email"
                         autoComplete="email"
                         defaultValue=""
-                      />
+                       aria-invalid={!!fieldErrors.email} aria-describedby="error-email"/><FieldError name="email"/>
                     </label>
                     <label>
-                      Delivery address
+                      Complete shipping address *
                       <textarea
                         required
                         name="address"
                         maxLength={500}
                         autoComplete="street-address"
                         placeholder="House, street, area"
-                      />
+                       aria-invalid={!!fieldErrors.address} aria-describedby="error-address"/><FieldError name="address"/>
                     </label>
                     <div className="form-grid">
                       <label>
-                        City
+                        City *
                         <input
                           required
                           name="city"
                           maxLength={100}
                           autoComplete="address-level2"
                           placeholder="e.g. Lahore"
-                        />
+                         aria-invalid={!!fieldErrors.city} aria-describedby="error-city"/><FieldError name="city"/>
                       </label>
                       <label>
-                        Country
-                        <input value="Pakistan" readOnly />
+                        Country *
+                        <input name="country" required value="Pakistan" readOnly  aria-invalid={!!fieldErrors.country} aria-describedby="error-country"/><FieldError name="country"/>
                       </label>
                     </div>
-                    <label>Postal code<input name="postal_code" required maxLength={15} autoComplete="postal-code" placeholder="e.g. 54000" /></label>
-                    <MeasurementCheckout items={items} fields={measurementFields} services={business?.measurement_services} drafts={measurements} setDrafts={setMeasurements}/>
+                    <label>Postal code *<input name="postal_code" required maxLength={15} autoComplete="postal-code" placeholder="e.g. 54000"  aria-invalid={!!fieldErrors.postal_code} aria-describedby="error-postal_code"/><FieldError name="postal_code"/></label>
+
                     <details className="checkout-policy"><summary>Shipping, returns & refunds</summary><StorePolicy business={business} kind="delivery"/></details>
                     <h3>Payment method</h3>
                     {payments.cod_enabled && (
@@ -871,8 +881,8 @@ export default function Store({ initialProducts }) {
                     )}
                     <div className="totals">
                       {items.map((i) => (
-                        <span key={i.variant_id}>
-                          {i.product.name} · {i.variant?.type} × {i.quantity}
+                        <span key={i.line_key}>
+                          {i.product.name} · {i.variant?.type} {i.selected_size&&`· Size ${i.selected_size}`} × {i.quantity}
                           <b>{money(i.quantity * i.product.price)}</b>
                         </span>
                       ))}

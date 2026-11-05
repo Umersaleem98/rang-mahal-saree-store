@@ -29,7 +29,11 @@ class BusinessController extends Controller
             $rules["measurement_services.$service.required"] = 'present_with:measurement_services|array';
             $rules["measurement_services.$service.required.*"] = ['string', \Illuminate\Validation\Rule::in(array_keys(\App\Support\StitchingMeasurements::fields()))];
         }
+        $rules['size_chart']='sometimes|array';
+        $rules['max_product_images']='sometimes|integer|min:1|max:10';
+        $rules['max_product_video_mb']='sometimes|integer|min:1|max:50';
         $v = $r->validate($rules);
+        if(isset($v['size_chart']))$v['size_chart']=\App\Support\SizeGuide::validate($v['size_chart']);
         foreach ($v['measurement_services']??[] as $service) abort_if(count(array_diff($service['required'],$service['fields']))>0,422,'Required measurements must be enabled fields.');
         return DB::transaction(function () use ($v) {
             $row = DB::table('business_settings')->where('id', 1)->lockForUpdate()->first();
@@ -42,6 +46,7 @@ class BusinessController extends Controller
     public function shipment(Request $r)
     {
         $v = $r->validate([
+            ...OrderFulfillmentController::deliveryRules(),
             'id' => 'required|integer|exists:orders,id', 'courier_name' => 'nullable|string|max:100', 'courier_tracking_number' => 'nullable|string|max:150',
             'courier_tracking_url' => ['nullable', 'url:https', 'max:500'], 'estimated_delivery_date' => 'nullable|date',
             'payment_status' => 'required|in:Unrecorded,Pending,Paid,Partially Paid,Partially Refunded,Refunded',
@@ -57,10 +62,11 @@ class BusinessController extends Controller
             abort_if($v['payment_status'] === 'Refunded' && (! $paid || (float) $refund !== (float) $paid), 422, 'Enter the full recorded payment as refunded.');
             abort_if($v['payment_status'] === 'Partially Refunded' && (! $paid || ! $refund || $refund >= $paid), 422, 'Enter a refund below the recorded payment.');
             abort_if(in_array($v['payment_status'], ['Unrecorded', 'Pending']) && (($paid ?? 0) > 0 || $refund > 0), 422, 'Record the corresponding paid/refunded status for collected money.');
-            $fields = collect($v)->except('id')->all();
+              $fields = OrderFulfillmentController::normalizeDelivery(collect($v)->except('id')->all(), $o);
             $fields['paid_at'] = $paid > 0 ? ($o->paid_at ?? now()) : null;
+            $before=\App\Support\OrderEmails::snapshot($o);
             DB::table('orders')->where('id', $o->id)->update($fields);
-            if (collect($fields)->except('paid_at')->contains(fn ($value, $key) => (string) $value !== (string) ($o->$key ?? ''))) \App\Support\OrderEmails::record($o->id, 'details');
+            if ($before!==\App\Support\OrderEmails::snapshot(DB::table('orders')->find($o->id))) \App\Support\OrderEmails::record($o->id, 'details');
             return response()->json(['ok' => true]);
         });
     }

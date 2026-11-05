@@ -8,6 +8,7 @@ class BusinessSettings
     public static function defaults(): array
     {
         return [
+            'size_chart' => SizeGuide::defaults(), 'max_product_images'=>5, 'max_product_video_mb'=>20, 'courier_tracking_required'=>false,
             'measurement_services' => StitchingMeasurements::services(),
             'instagram_url' => 'https://www.instagram.com/rangmahal.site?vrfl=MWl3MzFzc3I0a3k4dg==', 'facebook_url' => 'https://www.facebook.com/share/1EzwsDoDMD/', 'whatsapp_url' => '',
             'support_email' => '', 'brand_name' => 'Rang Mahal', 'urdu_brand_name' => 'رنگ محل', 'tagline' => 'Rooted in Tradition, Worn with Love.',

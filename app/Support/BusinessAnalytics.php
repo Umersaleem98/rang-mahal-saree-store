@@ -61,7 +61,7 @@ class BusinessAnalytics
         $productRows = $products->map(function ($p) use ($items, $paidItems, $itemRevenue, $costAccess, $byId) {
             $lines = $items->where('product_id', $p->id); $paid = $paidItems->where('product_id', $p->id); $revenue = round($paid->sum($itemRevenue), 2);
             $sold = $lines->filter(fn ($i) => $byId[$i->order_id]->status === 'Delivered')->sum('quantity');
-            return ['name' => $p->name, 'sku' => $p->sku, 'category' => $p->category, 'brand' => $p->brand, 'units' => $sold, 'revenue' => $revenue, 'orders' => $lines->pluck('order_id')->unique()->count(), 'average_price' => $sold ? round($lines->filter(fn ($i) => $byId[$i->order_id]->status === 'Delivered')->sum(fn ($i) => $i->price * $i->quantity) / $sold, 2) : null, 'stock' => $p->stock, 'low_stock' => $p->variants->contains(fn ($v) => $v->enabled && $v->stock <= 5)];
+            return ['name' => $p->name, 'sku' => $p->sku, 'category' => $p->category, 'brand' => $p->brand, 'units' => $sold, 'revenue' => $revenue, 'orders' => $lines->pluck('order_id')->unique()->count(), 'average_price' => $sold ? round($lines->filter(fn ($i) => $byId[$i->order_id]->status === 'Delivered')->sum(fn ($i) => $i->price * $i->quantity) / $sold, 2) : null, 'stock' => $p->stock, 'low_stock' => $p->variants->contains(fn ($v) => $v->enabled && $v->stock!==null && $v->stock <= $p->low_stock_threshold)];
         })->sortByDesc('revenue')->values();
         $unitRanks = $productRows->pluck('units')->filter(fn ($n) => $n > 0)->unique()->sortDesc()->values();
         $productRows = $productRows->map(fn ($p) => [...$p, 'rank' => $p['units'] > 0 ? $unitRanks->search($p['units']) + 1 : null]);
@@ -78,7 +78,7 @@ class BusinessAnalytics
             'previous' => $previous, 'trends' => $time, 'cities' => $cities, 'products' => $productRows,
             'statuses' => self::groups($orders, fn ($o) => $o->status, fn () => 1), 'payments' => $payments->values(), 'payment_statuses' => self::groups($orders, fn ($o) => $o->payment_status, fn () => 1),
             'categories' => self::groups($paidItems, fn ($i) => $i->category_snapshot ?? $i->category, $itemRevenue), 'variants' => self::groups($paidItems, fn ($i) => $i->variant ?? 'Unrecorded', $itemRevenue),
-            'inventory' => ['units' => $inventoryRows->sum('stock'), 'out_of_stock' => $inventoryRows->where('stock', 0)->count(), 'low_stock' => $inventoryRows->where('low_stock', true)->count(), 'slow_moving' => $inventoryRows->where('units', 0)->values()],
+            'inventory' => ['units' => $inventoryRows->sum('stock'), 'out_of_stock' => $inventoryRows->whereStrict('stock', 0)->count(), 'low_stock' => $inventoryRows->where('low_stock', true)->count(), 'slow_moving' => $inventoryRows->where('units', 0)->values()],
             'profitability' => ['available' => $profit !== null, 'reason' => ! $costAccess ? 'Cost access restricted' : ($paidItems->isEmpty() ? 'No recorded paid orders' : (! $costKnown ? 'Cost Data Missing or refund/partial-payment accounting incomplete' : null)), 'net_sales' => $netSales, 'cost' => $costAccess ? $cost : null, 'gross_profit' => $profit, 'margin' => $profit !== null && $netSales > 0 ? round($profit / $netSales * 100, 2) : null, 'by_product' => $costAccess ? $profitGroups(fn ($i) => $i->name) : [], 'by_category' => $costAccess ? $profitGroups(fn ($i) => $i->category_snapshot ?? $i->category) : [], 'by_city' => $costAccess ? $profitGroups(fn ($i) => $byId[$i->order_id]->city) : []],
         ];
     }

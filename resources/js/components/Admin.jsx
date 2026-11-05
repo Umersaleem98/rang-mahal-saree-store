@@ -1,3 +1,5 @@
+import ProductWizard,{MediaLibrary} from "./ProductWizard";
+import OrderWorkflow from "./OrderWorkflow";
 import {MeasurementsSummary} from "./Stitching";
 "use client";
 import { useState, useEffect } from "react";
@@ -53,7 +55,8 @@ async function api(path, method = "GET", body) {
         }
       : {}),
   });
-  const d = await r.json();
+  if(r.status===413)throw Error('This upload exceeds the hosting request limit. Choose a smaller file or contact the administrator.');
+  let d;try{d=await r.json();}catch{throw Error('The server could not process this request. Please retry with a smaller upload.');}
   if (!r.ok) throw Error(d.error || Object.values(d.errors || {}).flat()[0] || d.message || "Request failed.");
   return d;
 }
@@ -193,6 +196,9 @@ export default function Admin() {
   const nav = [
     ["Overview", LayoutDashboard],
     ["Products & stock", Package],
+    ["Add New Product",Plus],
+    ["Inventory",Layers],
+    ["Product Media",Upload],
     ["Orders", ShoppingBag],
     ["Categories", Layers],
     ["Brands", Tags],
@@ -200,7 +206,7 @@ export default function Admin() {
     ["Payment settings", CreditCard],
     ["Business settings", CreditCard],
     ["Users & permissions", Users],
-  ].filter(([name]) => name === "Overview" || can(({"Products & stock":"products.view","Orders":"orders.view","Categories":"taxonomy.manage","Brands":"taxonomy.manage","Customers":"customers.manage","Payment settings":"settings.manage","Business settings":"settings.manage","Users & permissions":"users.manage"})[name]));
+  ].filter(([name]) => name === "Overview" || can(({"Products & stock":"products.view","Add New Product":"products.create","Inventory":"products.view","Product Media":"products.view","Orders":"orders.view","Categories":"taxonomy.manage","Brands":"taxonomy.manage","Customers":"customers.manage","Payment settings":"settings.manage","Business settings":"settings.manage","Users & permissions":"users.manage"})[name]));
   const filtered = products.filter((p) =>
     `${p.name} ${p.sku} ${p.category} ${p.brand} ${p.stock === 0 ? "out of stock" : p.variants?.some(v=>v.enabled && v.stock<=5) ? "low stock" : "in stock"}`
       .toLowerCase()
@@ -226,9 +232,11 @@ export default function Admin() {
           {nav.map(([name, Icon]) => (
             <button
               key={name}
+              aria-label={name}
+              title={name}
               className={tab === name ? "active" : ""}
               onClick={() => {
-                setTab(name); setTaxonomyEdit(null); setTaxonomy("");
+                if(name==='Add New Product'){if(!data)return;setEditing({...blank,brand:data.brands[0]?.name||'',category:data.categories[0]?.name||''});return;}setTab(name); setTaxonomyEdit(null); setTaxonomy("");
                 setSearch("");
                 setError("");
                 setMessage("");
@@ -429,7 +437,7 @@ export default function Admin() {
               </div>
             </>
           )}
-          {data && tab === "Products & stock" && (
+          {data && ["Products & stock","Inventory"].includes(tab) && (
             <section className="admin-card">
               <div className="table-tools">
                 <div className="admin-search">
@@ -508,8 +516,8 @@ export default function Admin() {
                 onSubmit={(e) => {
                   e.preventDefault();
                   action(async () => {
-                    await api("admin/" + tab.toLowerCase(), taxonomyEdit ? "PUT" : "POST", {
-                      ...(taxonomyEdit ? {id:taxonomyEdit.id} : {}), name: taxonomy,
+                    await api("admin/" + tab.toLowerCase(), taxonomyEdit?.id ? "PUT" : "POST", {
+                      ...(taxonomyEdit?.id ? {id:taxonomyEdit.id} : {}), name: taxonomy,...(tab==='Categories'?{image:taxonomyEdit?.image||null}:{}),
                     });
                     setTaxonomy(""); setTaxonomyEdit(null);
                   });
@@ -523,14 +531,15 @@ export default function Admin() {
                   onChange={(e) => setTaxonomy(e.target.value)}
                 />
                 <button disabled={busy} className="gold-button">
-                  <Plus size={16} /> {taxonomyEdit ? "SAVE" : "ADD"}{" "}
+                  <Plus size={16} /> {taxonomyEdit?.id ? "SAVE" : "ADD"}{" "}
                   {tab === "Brands" ? "BRAND" : "CATEGORY"}
                 </button>
               </form>
+              {tab==='Categories'&&<label>Category image (optional)<input value={taxonomyEdit?.image||''} placeholder="HTTPS URL or managed image path" onChange={e=>setTaxonomyEdit(v=>({...v,image:e.target.value}))}/><input type="file" accept="image/jpeg,image/png,image/webp" onChange={async e=>{const f=e.target.files[0];if(!f)return;try{const body=new FormData();body.append('images[]',f);const d=await api('admin/media','POST',body);setTaxonomyEdit(v=>({...v,image:d.images[0]}));}catch(e){setError(e.message);}}}/></label>}
               <div className="taxonomy-grid">
                 {data[tab.toLowerCase()].map((t) => (
                   <div key={t.id}>
-                    <Tags size={22} />
+                    {t.image?<img className="taxonomy-image" src={t.image} alt=""/>:<Tags size={22} />}
                     <h3>{t.name}</h3>
                     <p>
                       {
@@ -657,125 +666,11 @@ export default function Admin() {
           )}
           {data && tab === "Users & permissions" && can("users.manage") && <UserManagement api={api} onChanged={refresh}/>}
           {data && tab === "Customers" && <CustomerDashboard api={api} data={data}/>}
+          {data&&tab==='Product Media'&&<MediaLibrary api={api}/>}
           {data && tab === "Business settings" && <BusinessSettingsForm api={api}/>}
         </main>
       </div>
-      {editing && (
-        <div className="overlay">
-          <section
-            className="drawer wide"
-            role="dialog"
-            aria-modal="true"
-            aria-label="Product editor"
-          >
-            <div className="drawer-head">
-              <h2>{editing.id ? "Edit your drape" : "Add a new drape"}</h2>
-              <button
-                onClick={() => setEditing(null)}
-                aria-label="Close editor"
-              >
-                <X />
-              </button>
-            </div>
-            {error && <div className="error">{error}</div>}
-            <form
-              onSubmit={(e) => {
-                e.preventDefault();
-                action(async () => {
-                  const variants=(editing.raw_variants || editing.variants) || [{type:"Unstitched",regular_price:Number(editing.price),sale_price:null,sale_enabled:false,stock:Number(editing.stock),enabled:true},{type:"Stitched",regular_price:Number(editing.price),sale_price:null,sale_enabled:false,stock:0,enabled:false}];
-                  const enabled=variants.filter(v=>v.enabled);const cheapest=[...enabled].sort((a,b)=>(a.sale_enabled?a.sale_price:a.regular_price)-(b.sale_enabled?b.sale_price:b.regular_price))[0];
-                  const payload={...editing,variants,price:cheapest?(cheapest.sale_enabled?cheapest.sale_price:cheapest.regular_price):Number(editing.price),stock:enabled.reduce((sum,v)=>sum+Number(v.stock),0),featured:!!editing.featured};
-                  await api(
-                    "admin/products",
-                    editing.id ? "PUT" : "POST",
-                    payload,
-                  );
-                  setEditing(null);
-                  setMessage("Product saved successfully.");
-                });
-              }}
-            >
-              <h3>Product Information</h3>
-              {[
-                "name",
-                "color",
-                "fabric",
-                "badge",
-                "image",
-              ].map((k) => (
-                <label key={k}>
-                  {
-                    {
-                      name: "Product name",
-                      price: "Price (PKR)",
-                      compare_price: "Original price (optional)",
-                      stock: "Stock quantity",
-                      color: "Colour",
-                      fabric: "Fabric",
-                      badge: "Badge (optional)",
-                      image: "Image URL or /images/filename.jpg",
-                    }[k]
-                  }
-                  <input
-                    required={["name", "price", "stock", "image"].includes(k)}
-                    type={
-                      ["price", "compare_price", "stock"].includes(k)
-                        ? "number"
-                        : "text"
-                    }
-                    min={k === "price" ? 1 : 0}
-                    step={k === "stock" ? 1 : "any"}
-                    value={editing[k] ?? ""}
-                    onChange={(e) =>
-                      setEditing({
-                        ...editing,
-                        ...(k === "image" ? {images:[e.target.value,...(editing.images || []).slice(1)]} : {}),
-                        [k]: ["price", "compare_price", "stock"].includes(k)
-                          ? Number(e.target.value)
-                          : e.target.value,
-                      })
-                    }
-                  />
-                </label>
-              ))}
-              <h3>Categories & Brand Information</h3>
-              {["category", "brand"].map((k) => (
-                <label key={k}>
-                  {k === "category" ? "Category" : "Brand"}
-                  <select
-                    required
-                    value={editing[k]}
-                    onChange={(e) =>
-                      setEditing({ ...editing, [k]: e.target.value })
-                    }
-                  >
-                    <option value="">Choose {k}</option>
-                    {data[k === "category" ? "categories" : "brands"].map(
-                      (t) => (
-                        <option key={t.id}>{t.name}</option>
-                      ),
-                    )}
-                  </select>
-                </label>
-              ))}
-              <label>
-                Description
-                <textarea
-                  value={editing.description || ""}
-                  onChange={(e) =>
-                    setEditing({ ...editing, description: e.target.value })
-                  }
-                />
-              </label>
-              <ProductBusinessFields editing={editing} setEditing={setEditing} can={can}/>
-              <ProductOptions editing={editing} setEditing={setEditing} can={can} uploading={uploading} setUploading={setUploading} api={api} setError={setError}/>
-              <button disabled={busy || uploading} className="gold-button">
-                <Save size={16} /> {busy ? "SAVING…" : uploading ? "UPLOADING…" : "SAVE PRODUCT"}
-              </button>
-            </form>
-          </section>
-        </div>
-      )}
+      {editing&&<ProductWizard editing={editing} setEditing={setEditing} data={data} api={api} can={can} onClose={()=>setEditing(null)} onSaved={async status=>{setEditing(null);await refresh();setMessage(status==='draft'?'Draft saved. It is hidden from customers.':'Product published successfully.');}}/>}
       {importing && (
         <div className="overlay">
           <section className="drawer wide">
@@ -861,7 +756,7 @@ export default function Admin() {
                   let saved = 0;
                   try {
                     for (const p of valid) {
-                      await api("admin/products", "POST", p);
+                      await api("admin/products", "POST", {...p,publication_status:p.description.trim()? 'published':'draft'});
                       saved++;
                     }
                   } catch (e) {
@@ -872,7 +767,7 @@ export default function Admin() {
                     );
                   }
                   setImporting(false);
-                  setMessage(`${saved} products imported.`);
+                  setMessage(`${saved} products imported. Products without descriptions are saved as drafts for review.`);
                 })
               }
             >
@@ -911,7 +806,7 @@ export default function Admin() {
             <div className="totals">
               {lineItems.map((i) => (
                 <span key={i.id}>
-                  {i.name} · {i.variant || "Unstitched"} × {i.quantity}
+                  {i.name} · {i.variant || "Unstitched"} {i.selected_size&&`· Size ${i.selected_size}`} × {i.quantity}
                   <b>{money(i.price * i.quantity)}</b>{i.measurement_data&&<MeasurementsSummary data={i.measurement_data}/>}
                 </span>
               ))}
@@ -922,35 +817,7 @@ export default function Admin() {
                 Order total <b>{money(detail.total)}</b>
               </span>
             </div>
-            <label>
-              Update status
-              <select
-                value={detail.status}
-                disabled={busy || !can("orders.update")}
-                onChange={(e) => {
-                  const status = e.target.value;
-                  action(async () => {
-                    await api("admin/orders", "PUT", { id: detail.id, status });
-                    setDetail({ ...detail, status });
-                  });
-                }}
-              >
-                {[
-                  "Pending",
-                  "Confirmed",
-                  "Processing",
-                  "Packed",
-                  "Shipped",
-                  "Out for Delivery",
-                  "Delivered",
-                  "Cancelled",
-                  "Returned",
-                ].map((s) => (
-                  <option key={s}>{s}</option>
-                ))}
-              </select>
-            </label>
-            <ShipmentEditor detail={detail} api={api} onSaved={d=>{setDetail(d);refresh();}} can={can}/>
+            <OrderWorkflow detail={detail} api={api} onSaved={d=>{setDetail(d);refresh();}} can={can}/>
             <small>
               Cancellation restores reserved stock. Delivered and cancelled
               orders are final. Advance through delivery statuses in sequence.
