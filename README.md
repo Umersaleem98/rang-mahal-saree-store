@@ -15,7 +15,9 @@ Rang Mahal celebrates Pakistani culture through sarees, traditional colours and 
 
 This repository contains the React frontend, Laravel backend, MySQL migrations, compiled assets, tests and deployment guides. The earlier Next.js implementation remains in Git history; the current application runs on PHP hosting.
 
-## Product experience
+## Screenshots
+
+### Product experience
 
 ![Full saree image alongside stitched and unstitched options, XS–XL buttons and the Size Guide](docs/screenshots/product-sizing.webp)
 
@@ -78,8 +80,8 @@ Requirements: PHP 8.2+, Composer, MySQL and Node.js/npm for frontend builds. Ima
 ### Fresh development installation
 
 ```sh
-git clone https://github.com/Umersaleem98/zariya-saree-store.git
-cd zariya-saree-store
+git clone https://github.com/Umersaleem98/rang-mahal-saree-store.git
+cd rang-mahal-saree-store
 composer install
 ```
 

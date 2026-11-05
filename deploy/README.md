@@ -2,7 +2,7 @@
 
 Production: https://rangmahal.site/ and https://rangmahal.site/admin.
 
-The cPanel Git repository is `/home/jjt1xvidnzva/repositories/rangmahal`, linked to the `main` branch of `Umersaleem98/zariya-saree-store` using a repository-specific read-only SSH key. Application code and the private production `.env` live in `/home/jjt1xvidnzva/apps/rangmahal`. Only public assets and the Laravel entry point are served from `/home/jjt1xvidnzva/public_html`.
+The cPanel Git repository is `/home/jjt1xvidnzva/repositories/rangmahal`, linked to the `main` branch of `Umersaleem98/rang-mahal-saree-store` using a repository-specific read-only SSH key. Application code and the private production `.env` live in `/home/jjt1xvidnzva/apps/rangmahal`. Only public assets and the Laravel entry point are served from `/home/jjt1xvidnzva/public_html`.
 
 ## Publish an update
 
