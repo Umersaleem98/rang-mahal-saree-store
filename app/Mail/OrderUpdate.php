@@ -9,21 +9,24 @@ class OrderUpdate extends Mailable {
  public function heading(): string {
   if($this->details['event']==='setup')return 'Email setup test — no order has been placed';
   if($this->details['event']==='placed')return 'Order placed — we have received it';
-  if($this->details['event']!=='status')return 'Your order details have been updated';
+  if(!in_array($this->details['event'],['status','fulfillment'],true))return 'Your order details have been updated';
   return match($this->details['order']['status']) {
    'Confirmed'=>'Your order is confirmed','Processing'=>'Your order is being prepared','Packed'=>'Your order is packed',
-   'Shipped'=>'Your order has been dispatched','Out for Delivery'=>'Your order is out for delivery','Delivered'=>'Your order is marked delivered',
+   'Ready for Dispatch'=>'Your item is ready for dispatch','Delayed'=>'An item in your order is delayed','Delivery Failed'=>'A delivery attempt was unsuccessful','Shipped'=>'Your order has been dispatched','Out for Delivery'=>'Your order is out for delivery','Delivered'=>'Your order is marked delivered',
    'Cancelled'=>'Your order has been cancelled','Returned'=>'Your order is marked returned',default=>'An update on your order'
   };
  }
  public function updateMessage(): string {
   if($this->details['event']==='setup')return 'This is a one-time email setup check for Rang Mahal. No customer order has been placed, no payment is requested and no inventory has changed.';
   if($this->details['event']==='placed')return 'Thank you for choosing Rang Mahal. We have received your order. Our team will review it and keep you informed as it moves towards your doorstep.';
-  if($this->details['event']!=='status')return 'Your shipping or payment details have changed. Please review the latest recorded information below.';
+  if(!in_array($this->details['event'],['status','fulfillment'],true))return 'Your shipping or payment details have changed. Please review the latest recorded information below.';
   return match($this->details['order']['status']) {
    'Confirmed'=>'Our team has confirmed your order. You can follow its progress using your tracking ID.',
    'Processing'=>'Our team is preparing your selection. Your selected garment sizes are recorded with your order.',
    'Packed'=>'Your order has been packed and is awaiting dispatch.',
+   'Ready for Dispatch'=>'The item below has been packed and is ready to dispatch.',
+   'Delayed'=>'The item below is delayed. Use order tracking to see its latest progress.',
+   'Delivery Failed'=>'The courier could not complete delivery of the item below. Check your order tracking or contact support.',
    'Shipped'=>'Your order has been marked dispatched. Courier details appear below when assigned.',
    'Out for Delivery'=>'Your order has been marked out for delivery. Please keep your phone available for the courier.',
    'Delivered'=>'Your order has been marked delivered. Thank you for making Rang Mahal part of your story. If this does not match your delivery, please reply to this email.',

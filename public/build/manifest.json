@@ -1,34 +1,33 @@
 {
+  "_VendorPortal-B92IX9ga.js": {
+    "file": "assets/VendorPortal-B92IX9ga.js",
+    "name": "VendorPortal",
+    "isDynamicEntry": true,
+    "imports": [
+      "resources/js/app.jsx"
+    ]
+  },
   "resources/js/app.jsx": {
-    "file": "assets/app-C2EJvuIc.js",
+    "file": "assets/app-4roJdMUd.js",
     "name": "app",
     "src": "resources/js/app.jsx",
     "isEntry": true,
     "dynamicImports": [
-      "resources/js/components/VendorPortal.jsx",
+      "_VendorPortal-B92IX9ga.js",
       "resources/js/components/Admin.jsx"
     ],
     "css": [
-      "assets/app-h6-5mxJB.css"
+      "assets/app-Bk7hVLg1.css"
     ]
   },
   "resources/js/components/Admin.jsx": {
-    "file": "assets/Admin-_ZLQTBvV.js",
+    "file": "assets/Admin-N5oqqNN2.js",
     "name": "Admin",
     "src": "resources/js/components/Admin.jsx",
     "isDynamicEntry": true,
     "imports": [
       "resources/js/app.jsx",
-      "resources/js/components/VendorPortal.jsx"
-    ]
-  },
-  "resources/js/components/VendorPortal.jsx": {
-    "file": "assets/VendorPortal-CxFthe9s.js",
-    "name": "VendorPortal",
-    "src": "resources/js/components/VendorPortal.jsx",
-    "isDynamicEntry": true,
-    "imports": [
-      "resources/js/app.jsx"
+      "_VendorPortal-B92IX9ga.js"
     ]
   }
 }

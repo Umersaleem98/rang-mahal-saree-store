@@ -17,6 +17,29 @@ class OrderEmails {
   $key=hash('sha256',$id.'|'.$event.'|'.json_encode($snapshot));
   DB::table('order_email_outbox')->insertOrIgnore(['order_id'=>$id,'event_key'=>$key,'payload'=>json_encode(['event'=>$event,'order'=>$snapshot,'items'=>$items,'business'=>BusinessSettings::get()]),'available_at'=>now(),'created_at'=>now(),'updated_at'=>now()]);
  }
+ public static function queuePayload(int $id,string $key,array $payload):void {
+  DB::table('order_email_outbox')->insertOrIgnore([
+   'order_id'=>$id,'event_key'=>hash('sha256',$id.'|'.$key),'payload'=>json_encode($payload,JSON_THROW_ON_ERROR),
+   'available_at'=>now(),'created_at'=>now(),'updated_at'=>now(),
+  ]);
+ }
+
+ public static function fulfillment(object $row,?object $shipment):void {
+  $order=DB::table('orders')->find($row->order_id);
+  $item=DB::table('order_items')->where('id',$row->order_item_id)->first(['name','variant','quantity','price','stitching_charge','selected_size']);
+  $snapshot=self::snapshot($order);
+  $snapshot['status']=$row->status;
+  $snapshot['courier_name']=$shipment?->courier;
+  $snapshot['courier_tracking_number']=$shipment?->tracking;
+  $snapshot['courier_tracking_url']=$shipment?->tracking_url;
+  $snapshot['dispatched_at']=$shipment?->dispatched_on;
+  $snapshot['estimated_delivery_date']=$shipment?->expected_on;
+  $snapshot['delivery_notes']=null;
+  self::queuePayload($row->order_id,'shipment-'.$row->id.'|'.$row->assigned_at.'|'.$row->status,[
+   'fulfillment_id'=>$row->id,'event'=>'fulfillment','order'=>$snapshot,'items'=>[$item],'business'=>BusinessSettings::get(),
+  ]);
+ }
+
  public static function deliver(int $limit=50): int {
   if(in_array(config('mail.default'),['log','array']))return 0;
   $sent=0;

@@ -2986,3 +2986,9 @@ td small {
 .vendor-modal[open]{box-shadow:none}
 .table-product .vendor-image-button{border:0;background:none;padding:0;flex:none}
 .table-product .vendor-image-button img{width:44px;height:54px;object-fit:contain}
+
+.fulfillment-panel .vendor-kpis{margin:12px 0}
+.fulfillment-panel .vendor-fields{margin:12px 0}
+.fulfillment-panel h3{font-size:23px}
+.tracking-shipments{margin-top:20px}
+.tracking-shipments article{border-top:1px solid #ded1b7;padding:12px 0}

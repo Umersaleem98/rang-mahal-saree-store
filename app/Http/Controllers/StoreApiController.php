@@ -61,6 +61,7 @@ class StoreApiController extends Controller
             return response()->json(['orders' => DB::table('orders')->where('user_id', Auth::id())->orderByDesc('id')->get()]);
         }
         if ($path === 'track' && $method === 'POST') return app(GuestOrderController::class)->track($r);
+        if (str_starts_with($path, 'fulfillment/')) return app(VendorFulfillmentController::class)->handle($r, substr($path, 12));
         if (str_starts_with($path, 'vendor/')) return app(VendorInventoryController::class)->handle($r, substr($path, 7));
         if (! str_starts_with($path, 'admin/')) abort(404);
         abort_unless(Auth::check() && Auth::user()->active && in_array(Auth::user()->role, StoreAccess::ROLES), 403, 'Staff access required.');
@@ -132,7 +133,7 @@ class StoreApiController extends Controller
             return response()->json(['items' => DB::table('order_items')->where('order_id', $r->id)->get()->map(function ($i) use ($can,$r) {
                 if (! $can('costs.manage')) unset($i->unit_cost);
                 $i->image=DB::table('products')->where('id',$i->product_id)->value('image');
-                if ($r->user()->role==='super_admin') $i->supplier=DB::table('vendor_order_payables')->where('order_item_id',$i->id)->first(['vendor_name','inventory_code','unit_payable']);
+                if ($r->user()->role==='super_admin') $i->supplier=DB::table('vendor_order_payables')->where('order_item_id',$i->id)->first(['vendor_id','vendor_name','inventory_code','unit_payable']);
                 return $i;
             })]);
         }

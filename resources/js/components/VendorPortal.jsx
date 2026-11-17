@@ -1,5 +1,6 @@
 import React, {useEffect, useRef, useState} from 'react';
 import {SIZES} from './Sizing';
+import FulfillmentPanel from './FulfillmentPanel';
 
 async function api(path, method = 'GET', body) {
   const json = body && !(body instanceof FormData);
@@ -15,7 +16,7 @@ async function api(path, method = 'GET', body) {
 
 const emptyProduct = {name:'', category:'', type:'Unstitched', description:'', fabric:'', color:'',
   sizes:[], stock:0, images:[], purchase_cost:'', margin:'', proposed_price:'', payable:''};
-const emptyAccount = {name:'',email:'',password:'',active:true,contact_person:'',contact_email:'',phone:'',address:''};
+const emptyAccount = {name:'',email:'',password:'',active:true,contact_person:'',contact_email:'',phone:'',address:'',vendor_name:'',logo:null,fulfillment_enabled:true};
 const currency = value => 'PKR ' + Number(value || 0).toLocaleString('en-PK', {maximumFractionDigits:2});
 
 export function InventoryDialog({children,onClose,label,className=''}) {
@@ -77,7 +78,7 @@ export default function VendorPortal({embedded=false}) {
   const numberField = (label,key,draft,setter) => <label key={key}>{label}<input required={key!=='purchase_cost'} min="0" step={key==='stock'?1:'.01'} type="number" value={draft[key] ?? ''} onChange={e=>field(setter,key,e.target.value)}/></label>;
 
   return <main className="vendor-portal">
-    {!embedded && <header><h1>{owner ? 'Super Admin vendor inventory' : 'Vendor inventory'}</h1>
+    {!embedded && <header><h1>{owner ? 'Super Admin vendor inventory' : user?.name || 'Vendor dashboard'}</h1>
       <a href={owner?'/admin':'/'}>{owner?'Back to store administration':'View storefront'}</a>
       {user && <button type="button" disabled={busy} onClick={()=>action(async()=>{await api('auth/logout','POST',{});setUser(null);setData(null);setProduct(null);setAccount(null);setReview(null);})}>Sign out</button>}
     </header>}
@@ -89,6 +90,7 @@ export default function VendorPortal({embedded=false}) {
     }}><h2>Sign in</h2><label>Email <input name="email" type="email" required autoComplete="username"/></label><label>Password <input name="password" type="password" required autoComplete="current-password"/></label><button disabled={busy}>Sign in</button></form>}
     {user && !permitted && <p>This account does not have vendor access.</p>}
     {permitted && data && <>
+      {!owner&&<FulfillmentPanel Dialog={InventoryDialog} identity={user}/>}
       {owner && !embedded && <p><a href="/admin?tab=vendors">Open Vendors in store administration</a></p>}
       {owner && embedded && <>
         <div className="vendor-tabs" role="navigation" aria-label="Vendor management">{['Overview','All vendors','Inventory','Pending reviews','Financial records','Reports'].map(t=><button key={t} type="button" aria-pressed={tab===t} onClick={()=>{setTab(t);setRecord(null);}}>{t}{t==='Pending reviews'?' ('+tally(rows,'Pending')+')':''}</button>)}</div>
@@ -113,7 +115,10 @@ export default function VendorPortal({embedded=false}) {
           <label>Name <input required value={account.name} onChange={e=>field(setAccount,'name',e.target.value)}/></label>
           <label>Login email <input required type="email" value={account.email} onChange={e=>field(setAccount,'email',e.target.value)}/></label>
           <p>Assigned role: Vendor Sub-Admin</p>
-          {[['contact_person','Contact person'],['contact_email','Business email'],['phone','Phone number'],['address','Business address']].map(([key,label])=><label key={key}>{label}<input type={key==='contact_email'?'email':key==='phone'?'tel':'text'} value={account[key]??''} onChange={e=>field(setAccount,key,e.target.value)}/></label>)}
+          {account.logo&&<img width="70" src={account.logo} alt="Vendor logo"/>}
+          <label>Store logo<input type="file" accept="image/png,image/jpeg,image/webp" onChange={e=>{const file=e.target.files[0];if(file)action(async()=>{const form=new FormData();form.append('images[]',file);const uploaded=await api('vendor/media','POST',form);field(setAccount,'logo',uploaded.images[0]);});}}/></label>
+          <label><input type="checkbox" checked={Boolean(account.fulfillment_enabled??true)} onChange={e=>field(setAccount,'fulfillment_enabled',e.target.checked)}/> Allow fulfillment access</label>
+          {[['vendor_name','Vendor name'],['contact_person','Contact person'],['contact_email','Business email'],['phone','Phone number'],['address','Business address']].map(([key,label])=><label key={key}>{label}<input type={key==='contact_email'?'email':key==='phone'?'tel':'text'} value={account[key]??''} onChange={e=>field(setAccount,key,e.target.value)}/></label>)}
           <label>{account.id?'New password (optional)':'Initial password'} <input type="password" minLength={12} required={!account.id} value={account.password} onChange={e=>field(setAccount,'password',e.target.value)}/></label>
           <label><input type="checkbox" checked={Boolean(account.active)} onChange={e=>field(setAccount,'active',e.target.checked)}/> Account active</label>
           <button disabled={busy}>Save account</button> <button type="button" onClick={()=>setAccount(null)}>Cancel</button>

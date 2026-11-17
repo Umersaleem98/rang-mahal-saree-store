@@ -8,6 +8,7 @@ Status: {{ match($details['order']['status']) {'Shipped'=>'Dispatched','Packed'=
 Payment: {{ $details['order']['payment_method'] }} — {{ $details['order']['payment_status'] }}
 @foreach($details['items'] as $item)
 {{ $item['name'] }} — {{ $item['variant'] }} @if(!empty($item['selected_size'])) Size {{ $item['selected_size'] }} @endif × {{ $item['quantity'] }}: PKR {{ number_format($item['price']*$item['quantity'],2) }}
+Expected delivery: {{ $item['variant'] === 'Stitched' ? '5–7 working days' : '2–3 working days' }}
 @endforeach
 Delivery: PKR {{ number_format($details['order']['shipping'],2) }}
 Total: PKR {{ number_format($details['order']['total'],2) }}

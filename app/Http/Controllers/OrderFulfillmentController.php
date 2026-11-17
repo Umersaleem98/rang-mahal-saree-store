@@ -13,8 +13,12 @@ class OrderFulfillmentController extends Controller {
  }
  public function update(Request $r){
   $states=['Pending','Confirmed','Processing','Packed','Shipped','Out for Delivery','Delivered'];$v=$r->validate(['id'=>'required|integer|exists:orders,id','status'=>['required',Rule::in([...$states,'Cancelled','Returned'])],...self::deliveryRules()]);
-  return DB::transaction(function()use($v,$states){
+  return DB::transaction(function()use($v,$states,$r){
    $o=DB::table('orders')->where('id',$v['id'])->lockForUpdate()->first();if($o->status===$v['status']){unset($o->checkout_token,$o->request_hash);return response()->json(['ok'=>true,'order'=>$o]);}
+   if (DB::table('vendor_fulfillments')->where('order_id',$o->id)->exists()) {
+    abort_unless(in_array($v['status'],['Confirmed','Cancelled'],true),409,'Update assigned items in Vendor fulfillment.');
+    if ($v['status']==='Cancelled') VendorFulfillmentController::cancelAssignments($o->id,$r->user()->id);
+   }
    $return=$o->status==='Delivered'&&$v['status']==='Returned';abort_if(!$return&&in_array($o->status,['Delivered','Cancelled','Returned']),409,'This order is final.');
    $changes=collect($v)->except(['id','status'])->all();$method=$changes['delivery_method']??$o->delivery_method;
    if($v['status']==='Cancelled'){

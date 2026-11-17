@@ -27,6 +27,8 @@ class VendorInventoryController extends Controller
                 'active' => 'required|boolean',
                 'contact_person'=>'nullable|string|max:100', 'contact_email'=>'nullable|email|max:190',
                 'phone'=>'nullable|string|max:40', 'address'=>'nullable|string|max:2000',
+                'vendor_name'=>'nullable|string|max:100','fulfillment_enabled'=>'sometimes|boolean',
+                'logo'=>['nullable','regex:~^/media/products/[a-f0-9]{32}\.webp$~D','exists:media_assets,path'],
             ]);
             $account = ['name' => $fields['name'], 'email' => strtolower($fields['email']), 'active' => $fields['active']];
             if (!empty($fields['password'])) $account['password_hash'] = Hash::make($fields['password']);
@@ -42,6 +44,8 @@ class VendorInventoryController extends Controller
                 DB::table('vendor_profiles')->updateOrInsert(['user_id'=>$id],[
                     'contact_person'=>$fields['contact_person']??null,'email'=>$fields['contact_email']??null,
                     'phone'=>$fields['phone']??null,'address'=>$fields['address']??null,
+                    'vendor_name'=>$fields['vendor_name']??null,'fulfillment_enabled'=>$fields['fulfillment_enabled']??true,
+                    'logo'=>$fields['logo']??null,
                 ]);
             });
 
@@ -72,7 +76,7 @@ class VendorInventoryController extends Controller
             $result = ['listings' => $listings, 'categories' => DB::table('categories')->pluck('name')];
             if ($owner) {
                 $result['vendors'] = DB::table('users as u')->leftJoin('vendor_profiles as p','p.user_id','=','u.id')
-                    ->where('u.role','vendor')->get(['u.id','u.name','u.email','u.active','p.contact_person','p.email as contact_email','p.phone','p.address']);
+                    ->where('u.role','vendor')->get(['u.id','u.name','u.email','u.active','p.contact_person','p.email as contact_email','p.phone','p.address','p.logo','p.vendor_name','p.fulfillment_enabled']);
                 $result['purchases']=DB::table('vendor_purchases')->orderByDesc('id')->get();
                 $result['payments']=DB::table('vendor_payments')->orderByDesc('id')->get();
                 $result['sales']=DB::table('vendor_order_payables as p')->join('orders as o','o.id','=','p.order_id')

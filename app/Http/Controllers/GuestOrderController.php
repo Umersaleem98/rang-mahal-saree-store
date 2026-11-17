@@ -101,6 +101,7 @@ class GuestOrderController extends Controller
         if(!in_array($o->status,['Shipped','Out for Delivery','Delivered','Returned']))foreach(['courier_name','courier_tracking_number','courier_tracking_url','estimated_delivery_date','dispatched_at','delivery_notes'] as $key)$o->$key=null;
         if($o->delivery_method!=='courier')foreach(['courier_name','courier_tracking_number','courier_tracking_url'] as $key)$o->$key=null;
         $o->status_history = json_decode($o->status_history ?? '[]', true);
+        $o->fulfillments=VendorFulfillmentController::publicUpdates($o->id);
         unset($o->id);
         return response()->json(['order' => $o]);
     }

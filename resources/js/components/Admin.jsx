@@ -1,4 +1,5 @@
 import VendorPortal,{InventoryDialog} from './VendorPortal';
+import FulfillmentPanel from './FulfillmentPanel';
 import ProductWizard,{MediaLibrary} from "./ProductWizard";
 import OrderWorkflow from "./OrderWorkflow";
 import {MeasurementsSummary} from "./Stitching";
@@ -479,6 +480,7 @@ export default function Admin() {
               <ProductListing products={filtered} can={can} onEdit={setEditing} onArchive={p=>action(()=>api("admin/products","DELETE",{id:p.id}))}/>
             </section>
           )}
+          {data && tab === "Orders" && user.role==="super_admin" && <FulfillmentPanel owner Dialog={InventoryDialog}/>}
           {data && tab === "Orders" && (
             <section className="admin-card">
               <div className="table-tools">
@@ -825,6 +827,7 @@ export default function Admin() {
                 Order total <b>{money(detail.total)}</b>
               </span>
             </div>
+            {user.role==="super_admin" && <FulfillmentPanel owner order={detail} items={lineItems} Dialog={InventoryDialog} onChanged={refresh}/>}
             <OrderWorkflow detail={detail} api={api} onSaved={d=>{setDetail(d);refresh();}} can={can}/>
             <small>
               Cancellation restores reserved stock. Delivered and cancelled
