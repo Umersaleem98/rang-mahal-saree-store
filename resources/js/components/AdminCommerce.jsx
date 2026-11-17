@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 
 export const staffRoles = ['super_admin','admin','order_manager','product_manager','staff'];
-const labels = {super_admin:'Super Admin',admin:'Admin',order_manager:'Order Manager',product_manager:'Product Manager',staff:'Staff',customer:'Customer'};
+const labels = {vendor:'Vendor Sub-Admin',super_admin:'Super Admin',admin:'Admin',order_manager:'Order Manager',product_manager:'Product Manager',staff:'Staff',customer:'Customer'};
 export const roleLabel = r => labels[r] || r;
 export function ProductOptions({editing,setEditing,can,uploading,setUploading,api,setError}) {
   const variants=editing.raw_variants || editing.variants || [

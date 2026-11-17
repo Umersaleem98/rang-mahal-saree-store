@@ -887,7 +887,7 @@ export default function Store({ initialProducts }) {
                         </span>
                       ))}
                       <span>
-                        Delivery<b>{shipping ? money(shipping) : "Free"}</b>
+                        Delivery Charges<b>{shipping ? money(shipping) : "Free"}</b>
                       </span>
                       <span className="grand-total">
                         Total <b>{money(subtotal + shipping)}</b>

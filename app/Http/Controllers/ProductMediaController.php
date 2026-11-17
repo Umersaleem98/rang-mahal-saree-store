@@ -61,7 +61,7 @@ class ProductMediaController extends Controller
     }
     public function index()
     {
-        $assets=DB::table('media_assets')->whereNull('trashed_at')->orderByDesc('id')->limit(200)->get()->map(function($a){$a->products=DB::table('product_media')->where('asset_id',$a->id)->count();return $a;});
+        $assets=DB::table('media_assets')->when(request()->user()?->role!=='super_admin',fn($q)=>$q->whereNotIn('uploaded_by',DB::table('users')->where('role','vendor')->select('id')))->whereNull('trashed_at')->orderByDesc('id')->limit(200)->get()->map(function($a){$a->products=DB::table('product_media')->where('asset_id',$a->id)->count();return $a;});
         $known=$assets->pluck('path');$legacy=collect();foreach(DB::table('products')->get(['id','image','images','video_url']) as $p)foreach(array_filter([...(json_decode($p->images??'[]',true)?:[$p->image]),$p->video_url]) as $path)if(!$known->contains($path))$legacy->push(['id'=>'legacy-'.$p->id.'-'.md5($path),'path'=>$path,'kind'=>$path===$p->video_url?'video':'image','bytes'=>null,'width'=>null,'height'=>null,'products'=>1]);
         return response()->json(['assets'=>$assets->concat($legacy->unique('path'))->values()]);
     }
@@ -71,6 +71,20 @@ class ProductMediaController extends Controller
         abort_unless(preg_match('/^[a-f0-9]{32}\.webp$/D', $file), 404);
         $path = storage_path('app/public/products/'.$file);
         abort_unless(is_file($path), 404);
-        return response()->file($path, ['Content-Type' => 'image/webp', 'Cache-Control' => 'public, max-age=31536000, immutable', 'X-Content-Type-Options' => 'nosniff']);
+        $url='/media/products/'.$file;
+        $asset=DB::table('media_assets as m')->join('users as u','u.id','=','m.uploaded_by')
+            ->where('m.path',$url)->where('u.role','vendor')->first(['m.uploaded_by']);
+        $cache='public, max-age=31536000, immutable';
+        if ($asset) {
+            $public=DB::table('products')->where('active',true)->where('publication_status','published')
+                ->where(fn($q)=>$q->where('image',$url)->orWhereJsonContains('images',$url))->exists();
+            if (!$public) {
+                $user=request()->user();
+                $authenticated=$user && $user->active && request()->session()->get('auth_version')===$user->auth_version;
+                abort_unless($authenticated && ($user->role==='super_admin' || $user->id==$asset->uploaded_by),404);
+            }
+            $cache='private, no-store';
+        }
+        return response()->file($path, ['Content-Type' => 'image/webp', 'Cache-Control' => $cache, 'X-Content-Type-Options' => 'nosniff']);
     }
 }

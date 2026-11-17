@@ -1,3 +1,4 @@
+import VendorPortal,{InventoryDialog} from './VendorPortal';
 import ProductWizard,{MediaLibrary} from "./ProductWizard";
 import OrderWorkflow from "./OrderWorkflow";
 import {MeasurementsSummary} from "./Stitching";
@@ -74,7 +75,7 @@ export default function Admin() {
   const [user, setUser] = useState(null),
     [loading, setLoading] = useState(true),
     [data, setData] = useState(null),
-    [tab, setTab] = useState("Overview"),
+    [tab, setTab] = useState(()=>({vendors:"Vendors",products:"Products & stock"}[new URLSearchParams(location.search).get("tab")] || "Overview")),
     [error, setError] = useState(""),
     [message, setMessage] = useState(""),
     [busy, setBusy] = useState(false),
@@ -85,6 +86,7 @@ export default function Admin() {
     [csv, setCsv] = useState(""),
     [detail, setDetail] = useState(null),
     [lineItems, setLineItems] = useState([]);
+  const [orderPhoto,setOrderPhoto]=useState(null);
   const [taxonomyEdit,setTaxonomyEdit] = useState(null);
   const [uploading, setUploading] = useState(false);
   const can = p => (data?.permissions || user?.permissions || []).includes(p);
@@ -101,6 +103,7 @@ export default function Admin() {
   useEffect(() => {
     api("auth")
       .then(async (d) => {
+        if(d.user?.role==="vendor"){location.replace("/vendor");return;}
         setUser(d.user);
         if (staffRoles.includes(d.user?.role)) await refresh();
       })
@@ -203,10 +206,11 @@ export default function Admin() {
     ["Categories", Layers],
     ["Brands", Tags],
     ["Customers", Users],
+    ["Vendors", Users],
     ["Payment settings", CreditCard],
     ["Business settings", CreditCard],
     ["Users & permissions", Users],
-  ].filter(([name]) => name === "Overview" || can(({"Products & stock":"products.view","Add New Product":"products.create","Inventory":"products.view","Product Media":"products.view","Orders":"orders.view","Categories":"taxonomy.manage","Brands":"taxonomy.manage","Customers":"customers.manage","Payment settings":"settings.manage","Business settings":"settings.manage","Users & permissions":"users.manage"})[name]));
+  ].filter(([name]) => name === "Overview" || (name === "Vendors" && user.role === "super_admin") || can(({"Products & stock":"products.view","Add New Product":"products.create","Inventory":"products.view","Product Media":"products.view","Orders":"orders.view","Categories":"taxonomy.manage","Brands":"taxonomy.manage","Customers":"customers.manage","Payment settings":"settings.manage","Business settings":"settings.manage","Users & permissions":"users.manage"})[name]));
   const filtered = products.filter((p) =>
     `${p.name} ${p.sku} ${p.category} ${p.brand} ${p.stock === 0 ? "out of stock" : p.variants?.some(v=>v.enabled && v.stock<=5) ? "low stock" : "in stock"}`
       .toLowerCase()
@@ -229,7 +233,6 @@ export default function Admin() {
         </a>
 
         <nav>
-          {user.role === 'super_admin' && <a className="vendor-admin-link" href="/vendor">Vendor inventory</a>}
           {nav.map(([name, Icon]) => (
             <button
               key={name}
@@ -666,6 +669,7 @@ export default function Admin() {
             </section>
           )}
           {data && tab === "Users & permissions" && can("users.manage") && <UserManagement api={api} onChanged={refresh}/>}
+          {data && tab === "Vendors" && user.role === "super_admin" && <VendorPortal embedded/>}
           {data && tab === "Customers" && <CustomerDashboard api={api} data={data}/>}
           {data&&tab==='Product Media'&&<MediaLibrary api={api}/>}
           {data && tab === "Business settings" && <BusinessSettingsForm api={api}/>}
@@ -777,6 +781,7 @@ export default function Admin() {
           </section>
         </div>
       )}
+      {orderPhoto && <InventoryDialog className="vendor-preview" label="Order photo" onClose={()=>setOrderPhoto(null)}><button onClick={()=>setOrderPhoto(null)}>Close preview</button><img src={orderPhoto} alt="Order product"/></InventoryDialog>}
       {detail && (
         <div className="overlay">
           <section className="drawer wide">
@@ -808,7 +813,9 @@ export default function Admin() {
               {lineItems.map((i) => (
                 <span key={i.id}>
                   {i.name} · {i.variant || "Unstitched"} {i.selected_size&&`· Size ${i.selected_size}`} × {i.quantity}
-                  <b>{money(i.price * i.quantity)}</b>{i.measurement_data&&<MeasurementsSummary data={i.measurement_data}/>}
+                  {i.image && <button aria-label={"Preview "+i.name} className="admin-order-image" type="button" onClick={()=>setOrderPhoto(i.image)}><img src={i.image} alt=""/></button>}
+                  <b>{money(i.price * i.quantity)}</b>
+                  {i.supplier && <small className="admin-supplier-summary">{i.supplier.vendor_name} · {i.supplier.inventory_code} · Approved purchase {money(i.supplier.unit_payable)} per unit · Retail {money(i.price)} per unit · {detail.status} · {detail.created_at}</small>}{i.measurement_data&&<MeasurementsSummary data={i.measurement_data}/>}
                 </span>
               ))}
               <span>

@@ -2967,3 +2967,22 @@ td small {
 .vendor-card .table-scroll{overflow:auto}
 .vendor-card table{min-width:960px;border-collapse:collapse;width:100%}
 .vendor-card td,.vendor-card th{padding:9px;text-align:left;border-bottom:1px solid #ddd1b7}
+
+.admin-content .vendor-portal{padding:0;max-width:none}
+.vendor-tabs{display:flex;flex-wrap:wrap;gap:4px;margin:10px 0 16px}
+.vendor-tabs button[aria-pressed=true]{background:#d7bd83;color:#211b13}
+.vendor-kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(135px,1fr));gap:12px}
+.vendor-kpis>div{display:grid;gap:6px;border:1px solid #ded1b7;background:#fcf8ee;padding:14px}
+.vendor-kpis strong{font-size:22px}
+.vendor-portal .vendor-image-button{padding:0;background:none;border:0}
+.vendor-image-button img,.admin-order-image img{width:44px;height:54px;object-fit:contain}
+.admin-supplier-summary{display:block;grid-column:1/-1;font-size:13px}
+.vendor-modal[open]{display:block;position:fixed;inset:0;margin:auto;z-index:2000;max-width:min(90vw,720px);width:100%;max-height:85dvh;overflow:auto;border:1px solid #ad9e81;padding:12px;background:#fffdf7;box-shadow:0 0 0 100vmax #0008}
+.vendor-modal .vendor-card{margin:0}
+.vendor-preview img{display:block;width:100%;max-height:73dvh;object-fit:contain}
+.vendor-card td,.vendor-card th{font-size:14px;vertical-align:middle}
+
+.vendor-modal::backdrop{background:#0008}
+.vendor-modal[open]{box-shadow:none}
+.table-product .vendor-image-button{border:0;background:none;padding:0;flex:none}
+.table-product .vendor-image-button img{width:44px;height:54px;object-fit:contain}

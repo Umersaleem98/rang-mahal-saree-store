@@ -65,12 +65,15 @@ class GuestOrderController extends Controller
             $reference = BusinessSettings::reference();
             $id = DB::table('orders')->insertGetId([...collect($v)->except('items')->all(), 'user_id' => null, 'created_at' => now(), 'payment_status' => 'Pending', 'status_history' => json_encode([['status' => 'Pending', 'at' => now()->toIso8601String()]]), 'request_hash' => $hash, 'reference' => $reference, 'total' => $cents / 100 + $shipping, 'shipping' => $shipping]);
             foreach ($items as $item) {
-                DB::table('order_items')->insert([...$item, 'order_id' => $id]);
+                $orderItem=DB::table('order_items')->insertGetId([...$item, 'order_id' => $id]);
                 $listing = DB::table('vendor_listings')->where('product_id', $item['product_id'])->first();
-                if ($listing && $products[$item['product_id']]->cost_price !== null) {
+                if ($listing) {
                     DB::table('vendor_order_payables')->insert([
                         'listing_id' => $listing->id, 'order_id' => $id,
-                        'quantity' => $item['quantity'], 'unit_payable' => $products[$item['product_id']]->cost_price,
+                        'quantity' => $item['quantity'], 'unit_payable' => $listing->approved_payable ?? 0,
+                        'order_item_id'=>$orderItem,'vendor_id'=>$listing->vendor_id,
+                        'vendor_name'=>DB::table('users')->where('id',$listing->vendor_id)->value('name'),
+                        'inventory_code'=>$listing->inventory_code ?? 'HS-SAR-'.str_pad((string)$listing->id,4,'0',STR_PAD_LEFT),
                     ]);
                 }
                 if($item['stock_reserved'])DB::table('product_variants')->where('id', $item['stock_variant_id'])->decrement('stock', $item['quantity']);

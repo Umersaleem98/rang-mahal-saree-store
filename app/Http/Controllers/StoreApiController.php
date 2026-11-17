@@ -57,6 +57,7 @@ class StoreApiController extends Controller
         if ($path === 'orders' && $method === 'POST') return app(GuestOrderController::class)->place($r, $this->payments());
         if ($path === 'orders' && $method === 'GET') {
             abort_unless(Auth::check(), 401);
+            abort_if(Auth::user()->role === 'vendor', 403);
             return response()->json(['orders' => DB::table('orders')->where('user_id', Auth::id())->orderByDesc('id')->get()]);
         }
         if ($path === 'track' && $method === 'POST') return app(GuestOrderController::class)->track($r);
@@ -103,7 +104,7 @@ class StoreApiController extends Controller
         if ($path === 'admin/products' && $method === 'DELETE') {
             abort_unless($can('products.delete'), 403);
             $r->validate(['id' => 'required|integer|exists:products,id']);
-            $p=DB::table('products')->find($r->id);abort_if(DB::table('vendor_listings')->where('product_id',$p->id)->exists(),422,'Manage supplier listings in Vendor Inventory.');abort_if($p->publication_status==='draft',422,'Publish a draft through the product editor.');DB::table('products')->where('id',$p->id)->update(['active'=>!$p->active,'publication_status'=>$p->active?'archived':'published']);
+            $p=DB::table('products')->find($r->id);abort_if($r->user()->role!=='super_admin' && DB::table('vendor_listings')->where('product_id',$p->id)->exists(),403,'Only the Super Admin can manage a linked storefront product.');abort_if($p->publication_status==='draft',422,'Publish a draft through the product editor.');DB::table('products')->where('id',$p->id)->update(['active'=>!$p->active,'publication_status'=>$p->active?'archived':'published']);
             return response()->json(['ok' => true]);
         }
         if (in_array($path, ['admin/categories', 'admin/brands'])) {
@@ -128,7 +129,12 @@ class StoreApiController extends Controller
         }
         if ($path === 'admin/order-items' && $method === 'GET') {
             abort_unless($can('orders.view'), 403); $r->validate(['id' => 'required|integer|exists:orders,id']);
-            return response()->json(['items' => DB::table('order_items')->where('order_id', $r->id)->get()->map(function ($i) use ($can) { if (! $can('costs.manage')) unset($i->unit_cost); return $i; })]);
+            return response()->json(['items' => DB::table('order_items')->where('order_id', $r->id)->get()->map(function ($i) use ($can,$r) {
+                if (! $can('costs.manage')) unset($i->unit_cost);
+                $i->image=DB::table('products')->where('id',$i->product_id)->value('image');
+                if ($r->user()->role==='super_admin') $i->supplier=DB::table('vendor_order_payables')->where('order_item_id',$i->id)->first(['vendor_name','inventory_code','unit_payable']);
+                return $i;
+            })]);
         }
         if($path==='admin/orders'&&$method==='PUT'){abort_unless($can('orders.update'),403);return app(OrderFulfillmentController::class)->update($r);}
         if($path==='admin/order-notifications'&&$method==='GET'){abort_unless($can('orders.view'),403);return app(OrderFulfillmentController::class)->notifications($r);}
