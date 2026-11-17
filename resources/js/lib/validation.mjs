@@ -66,4 +66,4 @@ export function normalizeItems(items) {
     .map(([id, quantity]) => ({ id, quantity }))
     .sort((a, b) => a.id - b.id);
 }
-export const shippingFor = (total, settings) => { if (!settings) throw Error("Shipping settings are required."); return total > Number(settings.free_delivery_threshold) ? 0 : Number(settings.standard_delivery_charge); };
+export const shippingFor = (total, settings) => { if (!settings) throw Error("Shipping settings are required."); return 400; };

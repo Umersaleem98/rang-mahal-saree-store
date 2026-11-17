@@ -229,6 +229,7 @@ export default function Admin() {
         </a>
 
         <nav>
+          {user.role === 'super_admin' && <a className="vendor-admin-link" href="/vendor">Vendor inventory</a>}
           {nav.map(([name, Icon]) => (
             <button
               key={name}

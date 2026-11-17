@@ -6,6 +6,7 @@ use Illuminate\Support\Facades\Route;
 
 Route::view('/', 'store');
 Route::view('/admin', 'store');
+Route::view('/vendor', 'store');
 Route::view('/track', 'store');
 Route::get('/products/{id}', function (int $id) {
     $product = \Illuminate\Support\Facades\DB::table('products')->where('id', $id)->where('active', true)->where('publication_status','published')->first();

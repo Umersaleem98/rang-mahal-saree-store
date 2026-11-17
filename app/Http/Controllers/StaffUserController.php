@@ -25,6 +25,7 @@ class StaffUserController extends Controller
             // Serialize privileged-account changes and prevent locking out the last owner.
             DB::table('users')->where('role', 'super_admin')->orderBy('id')->lockForUpdate()->get();
             $old = $r->id ? DB::table('users')->where('id', $r->id)->lockForUpdate()->first() : null;
+            abort_if($old?->role === 'vendor', 422, 'Manage vendor accounts in Vendor Inventory.');
             if ($old && $old->id === Auth::id()) abort_if($r->isMethod('DELETE') || ! $r->boolean('active') || $r->role !== 'super_admin', 422, 'You cannot delete, disable or demote your own account.');
             if ($old && $old->role === 'super_admin' && $old->active && ($r->isMethod('DELETE') || ! $r->boolean('active') || $r->role !== 'super_admin')) {
                 abort_if(DB::table('users')->where('role', 'super_admin')->where('active', true)->count() <= 1, 422, 'Keep at least one active Super Admin.');

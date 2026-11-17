@@ -45,7 +45,7 @@ class StoreTest extends TestCase
     {
         DB::table('store_settings')->where('id', 1)->update(['cod_enabled' => true]);
         [$id, $variant, $stitched] = $this->product(); $payload = $this->payload($id, $variant); $users = DB::table('users')->count();
-        $response = $this->postJson('/api/orders', $payload)->assertCreated()->assertJsonPath('total', 1350);
+        $response = $this->postJson('/api/orders', $payload)->assertCreated()->assertJsonPath('total', 1400);
         $reference = $response->json('reference'); $this->assertMatchesRegularExpression('/^RM-SR-[0-9]{8}-[0-9]{6,}$/', $reference);
         $this->assertDatabaseHas('orders', ['reference' => $reference, 'user_id' => null, 'postal_code' => '54000']);
         $this->assertDatabaseHas('order_items', ['variant_id' => $variant, 'variant' => 'Unstitched', 'price' => 1000]);

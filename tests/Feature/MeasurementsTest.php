@@ -19,7 +19,7 @@ class MeasurementsTest extends TestCase {
   $this->getJson('/api/admin/order-items?id='.$id)->assertForbidden();$this->owner('order_manager');$this->getJson('/api/admin/order-items?id='.$id)->assertOk()->assertJsonPath('items.1.selected_size','M');
  }
  public function test_sizes_and_every_required_checkout_field_are_validated():void {
-  [$p,$a,$b]=$this->product();$line=['id'=>$p,'variant_id'=>$b,'quantity'=>1];$count=DB::table('orders')->count();foreach([null,'XXL','invalid'] as $size)$this->postJson('/api/orders',$this->payload([[...$line,'selected_size'=>$size]]))->assertUnprocessable();
+  [$p,$a,$b]=$this->product();$line=['id'=>$p,'variant_id'=>$b,'quantity'=>1];$count=DB::table('orders')->count();foreach([null,'XXXL','invalid'] as $size)$this->postJson('/api/orders',$this->payload([[...$line,'selected_size'=>$size]]))->assertUnprocessable();
   $this->postJson('/api/orders',$this->payload([[...$line,'selected_size'=>'M','measurements'=>['unit'=>'in','values'=>['bust'=>36]]]]))->assertUnprocessable();
   $this->postJson('/api/orders',$this->payload([['id'=>$p,'variant_id'=>$a,'quantity'=>1,'selected_size'=>'M']]))->assertUnprocessable();
   foreach(['name','phone','email','address','country','city','postal_code'] as $key){$body=$this->payload([['id'=>$p,'variant_id'=>$a,'quantity'=>1]]);unset($body[$key]);$this->postJson('/api/orders',$body)->assertUnprocessable()->assertJsonValidationErrors($key);}
@@ -28,7 +28,7 @@ class MeasurementsTest extends TestCase {
  }
  public function test_configured_size_options_and_legacy_measurements_remain_independent():void {
   [$p,$a,$b]=$this->product();DB::table('products')->where('id',$p)->update(['size_options'=>json_encode(['S','M'])]);$this->postJson('/api/orders',$this->payload([['id'=>$p,'variant_id'=>$b,'quantity'=>1,'selected_size'=>'XL']]))->assertUnprocessable();
-  $r=$this->postJson('/api/orders',$this->payload([['id'=>$p,'variant_id'=>$b,'quantity'=>1,'selected_size'=>'M']]))->assertCreated();$id=DB::table('orders')->where('reference',$r->json('reference'))->value('id');$old=json_encode(['unit'=>'cm','values_cm'=>['bust'=>90]]);DB::table('order_items')->where('order_id',$id)->update(['measurement_data'=>$old]);$this->owner();$chart=SizeGuide::defaults();$chart['rows']['S']['waist']=30;$this->putJson('/api/admin/business-settings',['size_chart'=>$chart])->assertOk();$this->getJson('/api/catalog')->assertOk()->assertJsonPath('business.size_chart.rows.S.waist',30);$this->assertJsonStringEqualsJsonString($old,DB::table('order_items')->where('order_id',$id)->value('measurement_data'));
+  $r=$this->postJson('/api/orders',$this->payload([['id'=>$p,'variant_id'=>$b,'quantity'=>1,'selected_size'=>'M']]))->assertCreated();$id=DB::table('orders')->where('reference',$r->json('reference'))->value('id');$old=json_encode(['unit'=>'cm','values_cm'=>['bust'=>90]]);DB::table('order_items')->where('order_id',$id)->update(['measurement_data'=>$old]);$this->owner();$chart=SizeGuide::defaults();$chart['rows']['S']['waist']=30;$this->putJson('/api/admin/business-settings',['size_chart'=>$chart])->assertOk();$this->getJson('/api/catalog')->assertOk()->assertJsonPath('business.size_chart.rows.S.waist',30);$this->assertEquals($old,DB::table('order_items')->where('order_id',$id)->value('measurement_data'));
   $chart['rows']['S']['waist']=-1;$this->putJson('/api/admin/business-settings',['size_chart'=>$chart])->assertUnprocessable();$this->owner('staff');$this->putJson('/api/admin/business-settings',['size_chart'=>SizeGuide::defaults()])->assertForbidden();
  }
 }

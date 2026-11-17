@@ -21,7 +21,7 @@ class GuestOrderController extends Controller
             'city' => 'required|string|max:100', 'postal_code' => ['required', 'regex:/^[A-Za-z0-9 -]{3,15}$/'],
             'payment_method' => 'required|in:cod,bank', 'checkout_token' => 'required|uuid',
             'items' => 'required|array|min:1|max:50', 'items.*.id' => 'required|integer|min:1',
-            'items.*.measurements'=>'prohibited', 'items.*.selected_size'=>'nullable|in:XS,S,M,L,XL',
+            'items.*.measurements'=>'prohibited', 'items.*.selected_size'=>'nullable|in:XS,S,M,L,XL,XXL',
             'items.*.variant_id' => 'required|integer|min:1', 'items.*.quantity' => 'required|integer|min:1|max:20',
         ]);
         abort_unless($payments[$v['payment_method'].'_enabled'], 400, 'This payment option is currently disabled.');
@@ -59,13 +59,20 @@ class GuestOrderController extends Controller
                 $knownCost = $p->cost_price !== null && $p->additional_cost !== null && ($variant->type !== 'Stitched' || $p->stitching_cost !== null);
                 $unitCost = $knownCost ? (float) $p->cost_price + (float) $p->additional_cost + ($variant->type === 'Stitched' ? (float) $p->stitching_cost : 0) : null;
                 $cents += (int) round($price * 100) * $line['quantity'];
-                $items[] = ['selected_size'=>$size,'size_chart_snapshot'=>$sizeSnapshot?json_encode($sizeSnapshot):null,'stock_reserved'=>(bool)$p->inventory_tracking,'measurement_data'=>null, 'product_id' => $p->id, 'variant_id' => $variant->id, 'stock_variant_id' => $pool, 'stitching_charge' => $variant->stitching_charge, 'unit_cost' => $unitCost, 'category_snapshot' => $p->category, 'brand_snapshot' => $p->brand, 'sku_snapshot' => $p->sku, 'variant' => $variant->type, 'name' => $p->name, 'price' => $price, 'quantity' => $line['quantity']];
+                $items[] = ['selected_size'=>$size,'size_chart_snapshot'=>$sizeSnapshot?json_encode($sizeSnapshot):null,'stock_reserved'=>(bool)$p->inventory_tracking,'measurement_data'=>null, 'product_id' => $p->id, 'variant_id' => $variant->id, 'stock_variant_id' => $pool, 'stitching_charge' => $variant->stitching_charge, 'unit_cost' => $unitCost, 'category_snapshot' => $p->category, 'brand_snapshot' => $p->brand, 'sku_snapshot' => str_starts_with((string) $p->sku, 'HS-SAR-') ? null : $p->sku, 'variant' => $variant->type, 'name' => $p->name, 'price' => $price, 'quantity' => $line['quantity']];
             }
             $shipping = BusinessSettings::shipping($cents / 100, $settings);
             $reference = BusinessSettings::reference();
             $id = DB::table('orders')->insertGetId([...collect($v)->except('items')->all(), 'user_id' => null, 'created_at' => now(), 'payment_status' => 'Pending', 'status_history' => json_encode([['status' => 'Pending', 'at' => now()->toIso8601String()]]), 'request_hash' => $hash, 'reference' => $reference, 'total' => $cents / 100 + $shipping, 'shipping' => $shipping]);
             foreach ($items as $item) {
                 DB::table('order_items')->insert([...$item, 'order_id' => $id]);
+                $listing = DB::table('vendor_listings')->where('product_id', $item['product_id'])->first();
+                if ($listing && $products[$item['product_id']]->cost_price !== null) {
+                    DB::table('vendor_order_payables')->insert([
+                        'listing_id' => $listing->id, 'order_id' => $id,
+                        'quantity' => $item['quantity'], 'unit_payable' => $products[$item['product_id']]->cost_price,
+                    ]);
+                }
                 if($item['stock_reserved'])DB::table('product_variants')->where('id', $item['stock_variant_id'])->decrement('stock', $item['quantity']);
             }
             foreach ($products as $p) StoreCatalog::syncStock($p->id);

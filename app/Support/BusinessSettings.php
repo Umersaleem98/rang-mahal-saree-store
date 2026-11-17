@@ -12,7 +12,7 @@ class BusinessSettings
             'measurement_services' => StitchingMeasurements::services(),
             'instagram_url' => 'https://www.instagram.com/rangmahal.site?vrfl=MWl3MzFzc3I0a3k4dg==', 'facebook_url' => 'https://www.facebook.com/share/1EzwsDoDMD/', 'whatsapp_url' => '',
             'support_email' => '', 'brand_name' => 'Rang Mahal', 'urdu_brand_name' => 'رنگ محل', 'tagline' => 'Rooted in Tradition, Worn with Love.',
-            'standard_delivery_charge' => 350, 'free_delivery_threshold' => 10000, 'default_stitching_charge' => 5000,
+            'standard_delivery_charge' => 400, 'free_delivery_threshold' => 10000, 'default_stitching_charge' => 5000,
             'stitching_enabled' => true, 'order_prefix' => 'RM', 'order_category_code' => 'SR',
             'shipping_policy' => 'Delivery is available across Pakistan. Charges are calculated once at checkout. Dispatch and delivery estimates depend on your city and will be confirmed with your order.',
             'return_address' => 'Rang Mahal, NUST, Islamabad, Pakistan', 'return_city' => 'Islamabad', 'return_contact' => '',
@@ -25,12 +25,13 @@ class BusinessSettings
     }
     public static function get(): array
     {
-        return array_replace(self::defaults(), json_decode(DB::table('business_settings')->where('id', 1)->value('values') ?? '{}', true));
+        return array_replace(self::defaults(), json_decode(DB::table('business_settings')->where('id', 1)->value('values') ?? '{}', true), [
+            'standard_delivery_charge' => self::shipping(0),
+        ]);
     }
     public static function shipping(float $subtotal, ?array $settings = null): float
     {
-        $s = $settings ?? self::get();
-        return round($subtotal, 2) > (float) $s['free_delivery_threshold'] ? 0 : (float) $s['standard_delivery_charge'];
+        return 400.0;
     }
     public static function reference(): string
     {

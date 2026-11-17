@@ -45,7 +45,7 @@ class StoreApiController extends Controller
             abort_if(RateLimiter::tooManyAttempts($key, 10), 429, 'Too many attempts. Try again later.');
             RateLimiter::hit($key, 900);
             $u = ShopUser::where('email', $r->email)->first();
-            if (! $u || ! $u->active || ! in_array($u->role, StoreAccess::ROLES) || ! Hash::check($r->password, $u->password_hash ?? '')) return response()->json(['error' => 'Email or password is incorrect.'], 401);
+            if (! $u || ! $u->active || ! in_array($u->role, [...StoreAccess::ROLES, 'vendor'], true) || ! Hash::check($r->password, $u->password_hash ?? '')) return response()->json(['error' => 'Email or password is incorrect.'], 401);
             DB::table('users')->where('id', $u->id)->update(['last_login_at' => now()]);
             Auth::login($u); $r->session()->regenerate(); $r->session()->put('auth_version', $u->auth_version); RateLimiter::clear($key);
             return response()->json(['user' => $this->identity(), 'csrf_token' => csrf_token()]);
@@ -60,6 +60,7 @@ class StoreApiController extends Controller
             return response()->json(['orders' => DB::table('orders')->where('user_id', Auth::id())->orderByDesc('id')->get()]);
         }
         if ($path === 'track' && $method === 'POST') return app(GuestOrderController::class)->track($r);
+        if (str_starts_with($path, 'vendor/')) return app(VendorInventoryController::class)->handle($r, substr($path, 7));
         if (! str_starts_with($path, 'admin/')) abort(404);
         abort_unless(Auth::check() && Auth::user()->active && in_array(Auth::user()->role, StoreAccess::ROLES), 403, 'Staff access required.');
         $can = fn ($p) => StoreAccess::allows(Auth::user(), $p);
@@ -102,7 +103,7 @@ class StoreApiController extends Controller
         if ($path === 'admin/products' && $method === 'DELETE') {
             abort_unless($can('products.delete'), 403);
             $r->validate(['id' => 'required|integer|exists:products,id']);
-            $p=DB::table('products')->find($r->id);abort_if($p->publication_status==='draft',422,'Publish a draft through the product editor.');DB::table('products')->where('id',$p->id)->update(['active'=>!$p->active,'publication_status'=>$p->active?'archived':'published']);
+            $p=DB::table('products')->find($r->id);abort_if(DB::table('vendor_listings')->where('product_id',$p->id)->exists(),422,'Manage supplier listings in Vendor Inventory.');abort_if($p->publication_status==='draft',422,'Publish a draft through the product editor.');DB::table('products')->where('id',$p->id)->update(['active'=>!$p->active,'publication_status'=>$p->active?'archived':'published']);
             return response()->json(['ok' => true]);
         }
         if (in_array($path, ['admin/categories', 'admin/brands'])) {

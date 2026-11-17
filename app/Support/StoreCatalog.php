@@ -46,6 +46,7 @@ class StoreCatalog
             $p->effective_stitching_charge = (float) ($p->stitching_charge ?? $settings['default_stitching_charge']);
             $p->images = json_decode($p->images ?? 'null', true) ?: array_values(array_filter([$p->image]));
             if (! $costs) unset($p->cost_price, $p->stitching_cost, $p->additional_cost);
+            if ($public && str_starts_with((string) $p->sku, 'HS-SAR-') && !DB::table('vendor_listings')->where('product_id', $p->id)->where('show_code', true)->exists()) unset($p->sku);
             return $p;
         });
     }

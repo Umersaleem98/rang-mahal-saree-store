@@ -1,20 +1,30 @@
 {
   "resources/js/app.jsx": {
-    "file": "assets/app-CZZE9o93.js",
+    "file": "assets/app-2U7ulScp.js",
     "name": "app",
     "src": "resources/js/app.jsx",
     "isEntry": true,
     "dynamicImports": [
+      "resources/js/components/VendorPortal.jsx",
       "resources/js/components/Admin.jsx"
     ],
     "css": [
-      "assets/app-B-OFR8fm.css"
+      "assets/app-CuGdZbJi.css"
     ]
   },
   "resources/js/components/Admin.jsx": {
-    "file": "assets/Admin-BKucqsz8.js",
+    "file": "assets/Admin-jklrqK3E.js",
     "name": "Admin",
     "src": "resources/js/components/Admin.jsx",
+    "isDynamicEntry": true,
+    "imports": [
+      "resources/js/app.jsx"
+    ]
+  },
+  "resources/js/components/VendorPortal.jsx": {
+    "file": "assets/VendorPortal-BFFU-U-Q.js",
+    "name": "VendorPortal",
+    "src": "resources/js/components/VendorPortal.jsx",
     "isDynamicEntry": true,
     "imports": [
       "resources/js/app.jsx"

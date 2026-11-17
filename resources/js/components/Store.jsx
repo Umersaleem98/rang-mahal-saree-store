@@ -191,7 +191,7 @@ export default function Store({ initialProducts }) {
     return { ...i,line_key:`${variant?.id}:${i.selected_size||'-'}`, variant_id: variant?.id, variant, product: base && variant ? { ...base, price: variant.price, stock: variant.available ? variant.stock : 0 } : null };
   }).filter(i => i.product),
     subtotal = items.reduce((a, i) => a + i.product.price * i.quantity, 0),
-    shipping = business && subtotal <= Number(business.free_delivery_threshold) ? Number(business.standard_delivery_charge) : 0,
+    shipping = items.length ? 400 : 0,
     count = items.reduce((a, i) => a + i.quantity, 0);
   const selectedOption = selected?.variants?.find(v => v.id === chosenVariant);
   const selectedImages = selected?.images?.length ? selected.images : selected ? [selected.image] : [];
@@ -554,7 +554,7 @@ export default function Store({ initialProducts }) {
               <div className="price">{money(selectedOption?.price ?? selected.price)} {selectedOption?.discount > 0 && <><del>{money(selectedOption.regular_price)}</del><span className="sale-label">{selectedOption.discount}% OFF</span></>}</div>
               <fieldset className="variant-picker"><legend>Choose your option</legend>{["Unstitched","Stitched"].map(type=>{const v=selected.variants?.find(v=>v.type===type);return <label key={type} className={!v?.available ? "unavailable" : ""}><input type="radio" name="variant" value={v?.id || ""} checked={v?.id === chosenVariant} disabled={!v?.available} onChange={()=>setChosenVariant(v.id)} />{type}<span>{v?.enabled ? money(v.price) : "Unavailable"} · {v?.enabled ? v.stock===null?"Available to order":v.stock+" Pieces Left" : "Not offered"}</span></label>;})}</fieldset>
               {selectedOption?.type==='Stitched'&&<><SizeSelection sizes={selected.size_options} value={chosenSize} onChange={setChosenSize}/><SizeGuide chart={selected.effective_size_chart} reference={sizeReference} notes={selected.sizing_notes}/></>}
-              <p>{selected.description}</p><p className="product-shipping">{selected.shipping_info || `Delivery ${money(business?.standard_delivery_charge || 0)}. Free on orders above ${money(business?.free_delivery_threshold || 0)}.`}</p>
+              <p>{selected.description}</p>{selected.sku?.startsWith("HS-SAR-") && <p>Product code {selected.sku}</p>}<p className="product-shipping">{selectedOption?.type === "Stitched" ? "5–7 working days" : "2–3 working days"} · {money(400)} delivery per order</p>
               <div className="detail-list">
                 <span>
                   Fabric <b>{selected.fabric}</b>
@@ -661,7 +661,7 @@ export default function Store({ initialProducts }) {
                   <>
                     <div className="bag-progress">
                       <Truck size={17} />
-                      {shipping === 0 ? "Your order qualifies for free delivery." : `Free delivery on orders above ${money(business?.free_delivery_threshold || 0)}.`}
+                      {money(400)} delivery per order.
                     </div>
                     {items.map((i) => (
                       <div className="bag-item" key={i.line_key}>
