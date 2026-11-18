@@ -106,6 +106,8 @@ class VendorFulfillmentController extends Controller
                 'delivery'=>collect($order)->only(['name','address','city','postal_code','phone'])->all(),
                 'shipment'=>$this->shipment($shipment,true),'history'=>$history->orderBy('id')->get($owner?['*']:['action','status','created_at']),
                 'next'=>$this->next($row,$settings,$owner),
+                'stitching'=>DB::table('vendor_stitch_progress')->where('fulfillment_id',$row->id)->orderBy('id')->get(['status','created_at']),
+                'stitching_required'=>DB::table('vendor_sale_terms')->where('order_item_id',$row->order_item_id)->where('stitch_charge','>',0)->exists(),
             ];
             if ($owner) {
                 $result['vendor_id']=$row->vendor_id;
@@ -138,10 +140,19 @@ class VendorFulfillmentController extends Controller
         return $result;
     }
 
-    private function assign(Request $request)
+    public static function autoAssign(int $item,int $vendor):void
+    {
+        if (!DB::table('users')->where('id',$vendor)->where('role','vendor')->where('active',true)->exists()) return;
+        if (!(DB::table('vendor_profiles')->where('user_id',$vendor)->value('fulfillment_enabled')??true)) return;
+        $request=new Request(['item_id'=>$item,'vendor_id'=>$vendor]);
+        $request->setUserResolver(fn()=>(object)['id'=>0]);
+        (new self)->assign($request,true);
+    }
+
+    private function assign(Request $request,bool $automatic=false)
     {
         $data=$request->validate(['item_id'=>'required|integer|exists:order_items,id','vendor_id'=>'required|integer','notes'=>'nullable|string|max:1000']);
-        return DB::transaction(function () use($request,$data) {
+        return DB::transaction(function () use($request,$data,$automatic) {
             $item=DB::table('order_items')->find($data['item_id']);
             $order=DB::table('orders')->where('id',$item->order_id)->lockForUpdate()->first();
             abort_if(in_array($order->status,['Shipped','Out for Delivery','Delivered','Cancelled','Returned'],true),409,'This order has already dispatched or closed.');
@@ -151,11 +162,12 @@ class VendorFulfillmentController extends Controller
             abort_if($old && (DB::table('vendor_shipments')->where('fulfillment_id',$old->id)->exists() || in_array($old->status,['Delivered','Returned','Cancelled'],true)),409,'This item cannot be reassigned.');
             if ($old && (int)$old->vendor_id===(int)$vendor->id && $old->status!=='Rejected') return response()->json(['ok'=>true]);
             $source=DB::table('vendor_order_payables')->where('order_item_id',$item->id)->first();
+            $sale=DB::table('vendor_sale_terms')->where('order_item_id',$item->id)->first();
             $product=DB::table('products')->find($item->product_id);
             $snapshot=$old?json_decode($old->snapshot,true,flags:JSON_THROW_ON_ERROR):[
                 'name'=>$item->name,'image'=>$product?->image,'description'=>$product?->description,
                 'code'=>$source?->inventory_code,'original_vendor_id'=>$source?->vendor_id,'listing_id'=>$source?->listing_id,
-                'approved_price'=>$source?->unit_payable,'storefront_id'=>$item->product_id,
+                'approved_price'=>$sale?->entitlement===null?$source?->unit_payable:$sale->entitlement/100/$item->quantity,'storefront_id'=>$item->product_id,
                 'retail_price'=>$item->price,'quantity'=>$item->quantity,'variant'=>$item->variant,
                 'size'=>$item->selected_size,'category'=>$item->category_snapshot??$product?->category,
             ];
@@ -170,7 +182,7 @@ class VendorFulfillmentController extends Controller
                 DB::table('vendor_fulfillments')->where('id',$old->id)->update($values);
                 $id=$old->id;
             } else $id=DB::table('vendor_fulfillments')->insertGetId($values+['created_at'=>now()]);
-            $this->event((object) ($values+['id'=>$id]),$request->user()->id,'Assignment',$data['notes']??null,$old?->vendor_id);
+            $this->event((object) ($values+['id'=>$id]),$request->user()->id,'Assignment',$automatic?'Automatically routed from the confirmed supplier link':($data['notes']??null),$old?->vendor_id);
             return response()->json(['ok'=>true,'id'=>$id]);
         },3);
     }
@@ -223,6 +235,10 @@ class VendorFulfillmentController extends Controller
                 abort_unless(in_array($status,$this->next($row,$settings,$owner),true) || ($override && in_array($status,array_unique([...array_keys(self::NEXT),...self::NOTICE,'Rejected','Accepted','On Hold']),true)),422,'Invalid fulfillment transition.');
                 abort_if(($override || in_array($status,['Rejected','Delayed','Delivery Failed'],true)) && blank($data['notes']??null),422,'Enter a reason.');
                 $shipment=DB::table('vendor_shipments')->where('fulfillment_id',$row->id)->first();
+                if ($status==='Shipped') {
+                    $terms=DB::table('vendor_sale_terms')->where('order_item_id',$row->order_item_id)->first();
+                    if ($terms && $terms->stitch_charge>0) abort_unless(DB::table('vendor_stitch_progress')->where('fulfillment_id',$row->id)->latest('id')->value('status')==='Ready for Dispatch',422,'Complete the stitching workflow before dispatch.');
+                }
                 if ($status==='Shipped' && !$shipment) {
                     foreach (['courier','tracking','dispatched_on','expected_on'] as $field) abort_if(blank($data[$field]??null),422,'Enter the courier, tracking ID, dispatch date and expected delivery date.');
                     abort_unless(in_array($data['courier'],$settings['couriers'],true),422,'Choose a configured courier.');
@@ -243,6 +259,7 @@ class VendorFulfillmentController extends Controller
                 $row->status=$status;
                 $this->event($row,$request->user()->id,$override?'Admin override':'Status',$data['notes']??null);
                 $this->syncMaster($order);
+                \App\Support\VendorSettlement::syncOrder($order->id);
                 if (in_array($status,self::NOTICE,true)) OrderEmails::fulfillment($row,$shipment);
                 return response()->json(['ok'=>true]);
             },$request->hasFile('receipt')?1:3);

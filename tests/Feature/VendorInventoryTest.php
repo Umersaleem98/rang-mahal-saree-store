@@ -47,13 +47,13 @@ class VendorInventoryTest extends TestCase
                 'name' => 'Test vendor saree', 'category' => DB::table('categories')->value('name'),
                 'type' => 'Stitched', 'description' => 'Vendor test product',
                 'fabric' => 'Silk', 'color' => 'Gold', 'sizes' => ['XXL'], 'stock' => 3, 'images' => $images,
-                'purchase_cost' => 9000, 'margin' => 1000, 'proposed_price' => 14500, 'payable' => 10000,
+                'purchase_cost' => 9000, 'margin' => 1000,
             ];
             $this->postJson('/api/vendor/listings', $draft + ['code' => 'manual'])->assertUnprocessable();
             $submitted = $this->postJson('/api/vendor/listings', $draft)->assertOk();
             $id = $submitted->json('id');
             $code = $submitted->json('code');
-            $this->assertMatchesRegularExpression('/^HS-[A-Z0-9]+-\d{4,}$/', $code);
+            $this->assertMatchesRegularExpression('/^HS-[A-Z0-9]+-\d{3,}$/', $code);
             $this->assertDatabaseHas('vendor_submission_images',['listing_id'=>$id,'position'=>1]);
             $this->get($images[0])->assertOk();
             $this->assertFalse(collect($this->getJson('/api/catalog')->json('products'))->contains('name', $draft['name']));
@@ -68,13 +68,13 @@ class VendorInventoryTest extends TestCase
             DB::table('categories')->insertOrIgnore(['name'=>'Dupatta']);
             $secondUpload=$this->post('/api/vendor/media',['images'=>[UploadedFile::fake()->image('detail.jpg')]],['Accept'=>'application/json'])->assertCreated();
             $secondImages=$secondUpload->json('images');
-            $second=$this->postJson('/api/vendor/listings',array_replace($draft,['category'=>'Dupatta','name'=>'Test second supplier','images'=>$secondImages]))->assertOk();
+            $second=$this->postJson('/api/vendor/listings',array_replace($draft,['category'=>'Dupatta','name'=>'Test second supplier','images'=>$secondImages,'purchase_cost'=>600,'margin'=>150]))->assertOk();
             $this->assertStringStartsWith('HS-DUP-',$second->json('code'));
             $this->assertNotSame($code,$second->json('code'));
             $secondId=$second->json('id');
 
             $login($owner);
-            $price = ['id'=>$id,'approved_payable'=>9900];
+            $price = ['id'=>$id,'approved_payable'=>10000];
             $this->putJson('/api/vendor/review',$price+['status'=>'Published'])->assertUnprocessable();
             $this->putJson('/api/vendor/review',$price+['status'=>'Changes Requested','reason'=>'Add care details'])->assertOk();
             $login($vendor);
@@ -88,7 +88,7 @@ class VendorInventoryTest extends TestCase
             $this->postJson('/api/vendor/purchase',['id'=>$id,'quantity'=>2])->assertOk();
             $purchase=DB::table('vendor_purchases')->where('listing_id',$id)->first();
             $this->postJson('/api/vendor/payment',['purchase_id'=>$purchase->id,'amount'=>5000])->assertOk();
-            $this->postJson('/api/vendor/payment',['purchase_id'=>$purchase->id,'amount'=>14801])->assertUnprocessable();
+            $this->postJson('/api/vendor/payment',['purchase_id'=>$purchase->id,'amount'=>15001])->assertUnprocessable();
             $new=$this->postJson('/api/admin/products',[
                 'name'=>'Independent public product','description'=>'Public product description',
                 'category'=>$draft['category'],'brand'=>DB::table('brands')->value('name'),'image'=>'/images/gold.jpg',
@@ -128,13 +128,13 @@ class VendorInventoryTest extends TestCase
             $this->assertSame($code,$items[$p['id']]['supplier']['inventory_code']);
             $this->assertSame($second->json('code'),$items[$secondPublic]['supplier']['inventory_code']);
             $this->assertEquals(750,$items[$secondPublic]['supplier']['unit_payable']);
-            $this->putJson('/api/vendor/review',['id'=>$secondId,'status'=>'Approved','approved_payable'=>900])->assertOk();
+            $this->putJson('/api/vendor/review',['id'=>$secondId,'status'=>'Approved','approved_payable'=>900])->assertUnprocessable();
             $this->assertDatabaseHas('vendor_order_payables',['order_id'=>$orderId,'listing_id'=>$secondId,'unit_payable'=>750]);
-            $this->getJson('/api/fulfillment/list?order_id='.$orderId)->assertOk()->assertJsonCount(0,'rows');
+            $this->getJson('/api/fulfillment/list?order_id='.$orderId)->assertOk()->assertJsonCount(2,'rows');
             $vendorId=DB::table('users')->where('email',$vendor)->value('id');
             $otherId=DB::table('users')->where('email',$other)->value('id');
-            $assignOne=$this->postJson('/api/fulfillment/assign',['item_id'=>$items[$p['id']]['id'],'vendor_id'=>$vendorId])->assertOk()->json('id');
-            $assignTwo=$this->postJson('/api/fulfillment/assign',['item_id'=>$items[$secondPublic]['id'],'vendor_id'=>$otherId])->assertOk()->json('id');
+            $assignOne=DB::table('vendor_fulfillments')->where('order_item_id',$items[$p['id']]['id'])->value('id');
+            $assignTwo=DB::table('vendor_fulfillments')->where('order_item_id',$items[$secondPublic]['id'])->value('id');
             $this->postJson('/api/fulfillment/assign',['item_id'=>$items[$secondPublic]['id'],'vendor_id'=>$vendorId])->assertUnprocessable();
             $this->postJson('/api/fulfillment/assign',['item_id'=>$items[$secondPublic]['id'],'vendor_id'=>$vendorId,'notes'=>'Second warehouse unavailable temporarily'])->assertOk();
             $this->postJson('/api/fulfillment/assign',['item_id'=>$items[$secondPublic]['id'],'vendor_id'=>$otherId,'notes'=>'Second warehouse resumed operations'])->assertOk();
@@ -177,14 +177,14 @@ class VendorInventoryTest extends TestCase
             $update($assignTwo,'Delivered')->assertOk();
             $this->assertDatabaseHas('orders',['id'=>$orderId,'status'=>'Delivered','shipping'=>400]);
             $history=DB::table('order_email_outbox')->where('order_id',$orderId)->pluck('payload')->map(fn($x)=>json_decode($x,true));
-            $this->assertSame(1,$history->where('event','placed')->count());
+            $this->assertSame(1,$history->filter(fn($x)=>($x['event']??null)==='placed')->count());
             $this->assertSame(2,$history->where('event','fulfillment')->filter(fn($x)=>empty($x['resent']) && $x['order']['status']==='Shipped')->count());
             $this->assertSame(2,$history->where('event','fulfillment')->filter(fn($x)=>$x['order']['status']==='Delivered')->count());
             $message=$history->where('event','fulfillment')->first(fn($x)=>$x['order']['status']==='Shipped');
             $html=(new \App\Mail\OrderUpdate($message))->render();
             $this->assertStringContainsString('TEST-1',$html);
             $this->assertStringNotContainsString('Test supplier',$html);
-            $this->assertDatabaseHas('vendor_order_payables', ['listing_id' => $id, 'unit_payable' => 9900, 'quantity' => 1]);
+            $this->assertDatabaseHas('vendor_order_payables', ['listing_id' => $id, 'unit_payable' => 10000, 'quantity' => 1]);
         } finally {
             foreach ([...$images,...($secondImages??[])] as $path) @unlink(storage_path('app/public/products/'.basename($path)));
         }

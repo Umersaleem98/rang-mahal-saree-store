@@ -61,6 +61,7 @@ class StoreApiController extends Controller
             return response()->json(['orders' => DB::table('orders')->where('user_id', Auth::id())->orderByDesc('id')->get()]);
         }
         if ($path === 'track' && $method === 'POST') return app(GuestOrderController::class)->track($r);
+        if (str_starts_with($path, 'settlement/')) return app(VendorSettlementController::class)->handle($r, substr($path, 11));
         if (str_starts_with($path, 'fulfillment/')) return app(VendorFulfillmentController::class)->handle($r, substr($path, 12));
         if (str_starts_with($path, 'vendor/')) return app(VendorInventoryController::class)->handle($r, substr($path, 7));
         if (! str_starts_with($path, 'admin/')) abort(404);

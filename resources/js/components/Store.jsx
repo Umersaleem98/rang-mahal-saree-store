@@ -553,7 +553,7 @@ export default function Store({ initialProducts }) {
               <h2>{selected.name}</h2>
               <div className="price">{money(selectedOption?.price ?? selected.price)} {selectedOption?.discount > 0 && <><del>{money(selectedOption.regular_price)}</del><span className="sale-label">{selectedOption.discount}% OFF</span></>}</div>
               <fieldset className="variant-picker"><legend>Choose your option</legend>{["Unstitched","Stitched"].map(type=>{const v=selected.variants?.find(v=>v.type===type);return <label key={type} className={!v?.available ? "unavailable" : ""}><input type="radio" name="variant" value={v?.id || ""} checked={v?.id === chosenVariant} disabled={!v?.available} onChange={()=>setChosenVariant(v.id)} />{type}<span>{v?.enabled ? money(v.price) : "Unavailable"} · {v?.enabled ? v.stock===null?"Available to order":v.stock+" Pieces Left" : "Not offered"}</span></label>;})}</fieldset>
-              {selectedOption?.type==='Stitched'&&<><SizeSelection sizes={selected.size_options} value={chosenSize} onChange={setChosenSize}/><SizeGuide chart={selected.effective_size_chart} reference={sizeReference} notes={selected.sizing_notes}/></>}
+              {selectedOption?.type==='Stitched'&&<SizeSelection sizes={selected.size_options} value={chosenSize} onChange={setChosenSize}/>}<SizeGuide type={selectedOption?.type} chart={selected.effective_size_chart}/>
               <p>{selected.description}</p>{selected.sku?.startsWith("HS-SAR-") && <p>Product code {selected.sku}</p>}<p className="product-shipping">{selectedOption?.type === "Stitched" ? "5–7 working days" : "2–3 working days"} · {money(400)} delivery per order</p>
               <div className="detail-list">
                 <span>

@@ -2992,3 +2992,7 @@ td small {
 .fulfillment-panel h3{font-size:23px}
 .tracking-shipments{margin-top:20px}
 .tracking-shipments article{border-top:1px solid #ded1b7;padding:12px 0}
+
+.statement-download{display:inline-block;padding:9px 12px;margin:4px;border:1px solid #baa16d;text-decoration:underline}
+.settlement-panel form{border-top:1px solid #d8c9a9;padding:14px 0;margin-top:12px}
+.settlement-panel table{font-size:14px}

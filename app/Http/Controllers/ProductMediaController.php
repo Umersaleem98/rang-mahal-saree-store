@@ -78,7 +78,7 @@ class ProductMediaController extends Controller
         if ($asset) {
             $public=DB::table('products')->where('active',true)->where('publication_status','published')
                 ->where(fn($q)=>$q->where('image',$url)->orWhereJsonContains('images',$url))->exists();
-            if (!$public) {
+            if (!$public || DB::table('vendor_submission_images')->where('path',$url)->exists()) {
                 $user=request()->user();
                 $authenticated=$user && $user->active && request()->session()->get('auth_version')===$user->auth_version;
                 abort_unless($authenticated && ($user->role==='super_admin' || $user->id==$asset->uploaded_by),404);

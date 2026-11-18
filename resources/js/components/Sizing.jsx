@@ -14,21 +14,26 @@ const measurements = [
 ];
 
 function MeasurementFigure({label, arrow, index}) {
-  const marker = 'measure-arrow-' + index;
-  return <figure><svg viewBox="0 0 100 155" role="img" aria-label={label === 'PALLU' ? 'The pallu is the draped end hanging from the shoulder' : label + ' measurement shown by the red arrow'}>
-    <defs><marker id={marker} orient="auto-start-reverse" markerWidth="5" markerHeight="5" refX="4" refY="2.5"><path d="M0 0L5 2.5 0 5Z" fill="#a0272c"/></marker></defs>
-    <path d="M37 20Q38 5 51 6Q65 6 64 23L67 34H35Z" fill="#292019"/>
-    <ellipse cx="51" cy="21" rx="10" ry="12" fill="#bd8764"/>
-    <path d="M44 29L43 34 27 37 12 73 18 78 35 50 37 68H63L65 50 83 78 89 74 74 37 58 34 57 29Z" fill="#bd8764"/>
-    <path d="M27 37L21 54 31 59 36 50 36 64H65L65 50 71 60 82 55 74 37 58 34Q51 49 43 34Z" fill="#6e3938"/>
-    <path d="M36 68Q32 77 25 83L22 145Q50 151 77 145L69 77 64 65Z" fill="#ae794e" stroke="#6c4840"/>
-    <path d="M36 70L51 44 65 34 72 37 56 57 44 75 36 148H27Z" fill="#d9ad6f" stroke="#8e613f"/>
-    <path d="M62 36Q76 54 78 110L88 106Q89 67 73 37Z" fill={label==='PALLU'?'#a0272c':'#c39161'} stroke="#8e613f"/>
-    {arrow && <line x1={arrow[0]} y1={arrow[1]} x2={arrow[2]} y2={arrow[3]} stroke="#a0272c" strokeWidth="2" markerStart={'url(#'+marker+')'} markerEnd={'url(#'+marker+')'}/>}
+  const marker='measure-arrow-'+index;
+  return <figure><svg viewBox="0 0 100 170" role="img" aria-label={label+' garment measurement'}>
+    <defs><linearGradient id={'silk-'+index} x1="0" y1="0" x2="1" y2="1"><stop stopColor="#f5ecdc"/><stop offset=".5" stopColor="#d1b783"/><stop offset="1" stopColor="#eee0c7"/></linearGradient><marker id={marker} orient="auto-start-reverse" markerWidth="4" markerHeight="4" refX="3" refY="2"><path d="M0 0L4 2 0 4" fill="none" stroke="#8c4545" strokeWidth=".7"/></marker></defs>
+    <path d="M42 23Q36 10 43 6Q55-2 59 11L59 28 53 29 48 21Z" fill="#37312c"/>
+    <path d="M45 12Q51 8 57 14L56 23 51 28 48 34 57 38 68 39 80 60 82 77 78 79 73 62 64 49 63 71 72 103 76 156 58 161 25 158 30 110 38 76 36 51 28 64 24 81 20 79 22 61 32 39 43 36 47 29 43 22Z" fill="#eee2d4" stroke="#8d8276" strokeWidth=".65"/>
+    <path d="M33 39L28 53 36 58 39 48 39 68 62 68 64 49 71 58 77 53 68 39 56 36Q48 48 43 36Z" fill="#c8b18b" stroke="#8b7658" strokeWidth=".65"/>
+    <path d="M39 74Q45 76 62 72L67 88 72 119 76 156Q57 163 25 158L30 117Z" fill={'url(#silk-'+index+')'} stroke="#9a8565" strokeWidth=".7"/>
+    <path d="M61 38L67 40Q64 55 43 76L37 156 31 158 35 83Z" fill="#eee0c6" stroke="#a38e6c" strokeWidth=".65"/>
+    <path d="M64 40Q75 64 72 124L82 125Q85 77 68 40Z" fill={label==='PALLU'?'#cab080':'#eadcc5'} stroke="#a38e6c" strokeWidth=".65"/>
+    <path d="M42 80L42 154M48 82L50 158M54 81L59 158M61 84L68 157M33 111L30 155" fill="none" stroke="#b8a078" strokeWidth=".5"/>
+    {arrow&&<line x1={arrow[0]} y1={arrow[1]} x2={arrow[2]} y2={arrow[3]} stroke="#8c4545" strokeWidth="1" markerStart={'url(#'+marker+')'} markerEnd={'url(#'+marker+')'}/>}
   </svg><figcaption>{label}</figcaption></figure>;
 }
 
-export function SizeGuide() {
+export function SizeGuide({type='Stitched',chart}) {
+  if(type==='Unstitched'){
+    const dimensions=[['Saree length','saree_length'],['Saree width','saree_width'],['Pallu length','pallu_length'],['Pallu width','pallu_width']];
+    const supplied=dimensions.map(([label,key])=>[label,[...new Set(Object.values(chart?.rows||{}).map(row=>row[key]).filter(value=>value!=null))]]).filter(([,values])=>values.length);
+    return <details className="size-guide"><summary>Size Guide</summary><h4>Unstitched fabric dimensions</h4>{supplied.length?<ul>{supplied.map(([label,values])=><li key={label}>{label} {values.join(' / ')} {chart?.unit==='cm'?'cm':'inches'}</li>)}</ul>:<p>Fabric dimensions have not been provided for this product.</p>}</details>;
+  }
   return <details className="size-guide"><summary>Size Guide</summary>
     <div className="table-scroll"><table><thead><tr><th>Measurement (inches)</th>{SIZES.map(size => <th key={size} scope="col">{size}</th>)}</tr></thead>
       <tbody>{measurements.map(([label, values]) => <tr key={label}><th scope="row">{label}</th>{values.map((value, i) => <td key={SIZES[i]}>{value}</td>)}</tr>)}</tbody>

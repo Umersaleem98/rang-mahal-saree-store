@@ -17,6 +17,26 @@ class OrderEmails {
   $key=hash('sha256',$id.'|'.$event.'|'.json_encode($snapshot));
   DB::table('order_email_outbox')->insertOrIgnore(['order_id'=>$id,'event_key'=>$key,'payload'=>json_encode(['event'=>$event,'order'=>$snapshot,'items'=>$items,'business'=>BusinessSettings::get()]),'available_at'=>now(),'created_at'=>now(),'updated_at'=>now()]);
  }
+ public static function operations(int $id):void {
+  if (!DB::table('vendor_sale_terms')->where('order_id',$id)->exists()) return;
+  $order=DB::table('orders')->find($id);
+  $owner=DB::table('users')->where('role','super_admin')->where('active',true)->orderBy('id')->first();
+  if($owner) self::queuePayload($id,'owner-order',[
+   'audience'=>'operations','order'=>['email'=>$owner->email,'reference'=>$order->reference],
+   'items'=>DB::table('order_items')->where('order_id',$id)->get(['name','quantity']),
+   'link'=>url('/admin'),'business'=>BusinessSettings::get(),
+  ]);
+  foreach(DB::table('vendor_fulfillments')->where('order_id',$id)->get()->groupBy('vendor_id') as $vendorId=>$rows){
+   $vendor=DB::table('users')->where('id',$vendorId)->where('active',true)->first();
+   if(!$vendor)continue;
+   self::queuePayload($id,'vendor-order-'.$vendorId,[
+    'audience'=>'operations','order'=>['email'=>$vendor->email,'reference'=>$order->reference],
+    'items'=>$rows->map(fn($row)=>collect(json_decode($row->snapshot,true))->only(['name','quantity','code'])->all()),
+    'link'=>url('/vendor'),'business'=>BusinessSettings::get(),
+   ]);
+  }
+ }
+
  public static function queuePayload(int $id,string $key,array $payload):void {
   DB::table('order_email_outbox')->insertOrIgnore([
    'order_id'=>$id,'event_key'=>hash('sha256',$id.'|'.$key),'payload'=>json_encode($payload,JSON_THROW_ON_ERROR),
@@ -46,7 +66,7 @@ class OrderEmails {
   for($n=0;$n<$limit;$n++){
    $row=DB::transaction(function(){ $r=DB::table('order_email_outbox')->whereNull('sent_at')->where('attempts','<',8)->where('available_at','<=',now())->orderBy('id')->lockForUpdate()->first();if(!$r)return null;DB::table('order_email_outbox')->where('id',$r->id)->update(['attempts'=>$r->attempts+1,'available_at'=>now()->addMinutes(10),'updated_at'=>now()]);$r->attempt_id=DB::table('order_email_attempts')->insertGetId(['outbox_id'=>$r->id,'attempt'=>$r->attempts+1,'started_at'=>now(),'outcome'=>'sending']);return $r; });
    if(!$row)break;
-   try { $p=json_decode($row->payload,true,512,JSON_THROW_ON_ERROR);Mail::to($p['order']['email'])->send(new OrderUpdate($p));DB::table('order_email_outbox')->where('id',$row->id)->update(['sent_at'=>now(),'last_error'=>null,'updated_at'=>now()]);DB::table('order_email_attempts')->where('id',$row->attempt_id)->update(['outcome'=>'accepted','completed_at'=>now()]);$sent++; }
+   try { $p=json_decode($row->payload,true,512,JSON_THROW_ON_ERROR);Mail::to($p['order']['email'])->send(($p['audience']??null)==='operations'?new \App\Mail\OperationalOrder($p):new OrderUpdate($p));DB::table('order_email_outbox')->where('id',$row->id)->update(['sent_at'=>now(),'last_error'=>null,'updated_at'=>now()]);DB::table('order_email_attempts')->where('id',$row->attempt_id)->update(['outcome'=>'accepted','completed_at'=>now()]);$sent++; }
    catch(\Throwable $e){report($e);DB::table('order_email_attempts')->where('id',$row->attempt_id)->update(['outcome'=>'failed','completed_at'=>now(),'error'=>'Mail transport rejected or could not accept this message.']);DB::table('order_email_outbox')->where('id',$row->id)->update(['last_error'=>'Delivery failed; inspect private application log.','available_at'=>now()->addMinutes(min(360,2**($row->attempts+1))),'updated_at'=>now()]);}
   }
   return $sent;

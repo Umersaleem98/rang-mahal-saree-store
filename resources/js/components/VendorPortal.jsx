@@ -1,6 +1,7 @@
 import React, {useEffect, useRef, useState} from 'react';
 import {SIZES} from './Sizing';
 import FulfillmentPanel from './FulfillmentPanel';
+import SettlementPanel from './SettlementPanel';
 
 async function api(path, method = 'GET', body) {
   const json = body && !(body instanceof FormData);
@@ -15,7 +16,7 @@ async function api(path, method = 'GET', body) {
 }
 
 const emptyProduct = {name:'', category:'', type:'Unstitched', description:'', fabric:'', color:'',
-  sizes:[], stock:0, images:[], purchase_cost:'', margin:'', proposed_price:'', payable:''};
+  sizes:[], stock:0, images:[], purchase_cost:'', margin:'', notes:''};
 const emptyAccount = {name:'',email:'',password:'',active:true,contact_person:'',contact_email:'',phone:'',address:'',vendor_name:'',logo:null,fulfillment_enabled:true};
 const currency = value => 'PKR ' + Number(value || 0).toLocaleString('en-PK', {maximumFractionDigits:2});
 
@@ -34,6 +35,7 @@ export default function VendorPortal({embedded=false}) {
   const [filters,setFilters] = useState({});
   const [error,setError] = useState('');
   const [tab,setTab]=useState('Overview');
+  const [vendorTab,setVendorTab]=useState('Inventory');
   const [preview,setPreview]=useState(null);
   const [record,setRecord]=useState(null);
   const [busy,setBusy] = useState(false);
@@ -75,7 +77,7 @@ export default function VendorPortal({embedded=false}) {
     ['▣','Units purchased from vendors',quantity],
   ];
   const scoped= tab==='Pending reviews' ? listings.filter(row=>row.status==='Pending'):listings;
-  const numberField = (label,key,draft,setter) => <label key={key}>{label}<input required={key!=='purchase_cost'} min="0" step={key==='stock'?1:'.01'} type="number" value={draft[key] ?? ''} onChange={e=>field(setter,key,e.target.value)}/></label>;
+  const numberField = (label,key,draft,setter) => <label key={key}>{label}<input required min="0" step={key==='stock'?1:'.01'} type="number" value={draft[key] ?? ''} onChange={e=>field(setter,key,e.target.value)}/></label>;
 
   return <main className="vendor-portal">
     {!embedded && <header><h1>{owner ? 'Super Admin vendor inventory' : user?.name || 'Vendor dashboard'}</h1>
@@ -90,10 +92,12 @@ export default function VendorPortal({embedded=false}) {
     }}><h2>Sign in</h2><label>Email <input name="email" type="email" required autoComplete="username"/></label><label>Password <input name="password" type="password" required autoComplete="current-password"/></label><button disabled={busy}>Sign in</button></form>}
     {user && !permitted && <p>This account does not have vendor access.</p>}
     {permitted && data && <>
-      {!owner&&<FulfillmentPanel Dialog={InventoryDialog} identity={user}/>}
+      {!owner&&<nav className="vendor-tabs">{['Inventory','Orders','Financial Settlement'].map(t=><button key={t} aria-pressed={vendorTab===t} onClick={()=>setVendorTab(t)}>{t}</button>)}</nav>}
+      {!owner&&vendorTab==='Orders'&&<FulfillmentPanel Dialog={InventoryDialog} identity={user}/>}
+      {((!owner&&vendorTab==='Financial Settlement')||(owner&&embedded&&tab==='Financial Settlement'))&&<SettlementPanel owner={owner}/>}
       {owner && !embedded && <p><a href="/admin?tab=vendors">Open Vendors in store administration</a></p>}
       {owner && embedded && <>
-        <div className="vendor-tabs" role="navigation" aria-label="Vendor management">{['Overview','All vendors','Inventory','Pending reviews','Financial records','Reports'].map(t=><button key={t} type="button" aria-pressed={tab===t} onClick={()=>{setTab(t);setRecord(null);}}>{t}{t==='Pending reviews'?' ('+tally(rows,'Pending')+')':''}</button>)}</div>
+        <div className="vendor-tabs" role="navigation" aria-label="Vendor management">{['Overview','All vendors','Inventory','Pending reviews','Financial records','Financial Settlement','Reports'].map(t=><button key={t} type="button" aria-pressed={tab===t} onClick={()=>{setTab(t);setRecord(null);}}>{t}{t==='Pending reviews'?' ('+tally(rows,'Pending')+')':''}</button>)}</div>
         {(tab==='Overview'||tab==='Reports') && <section className="vendor-card"><h2>{tab==='Overview'?'Vendor overview':'Vendor reports'}</h2>
           {tab==='Overview'&&<div className="vendor-kpis">{kpis.map(([icon,label,value])=><div key={label}><span aria-hidden="true">{icon}</span><strong>{value}</strong><span>{label}</span></div>)}</div>}
           <label>Search vendors<input onChange={e=>field(setFilters,'vendorName',e.target.value)}/></label>
@@ -124,38 +128,37 @@ export default function VendorPortal({embedded=false}) {
           <button disabled={busy}>Save account</button> <button type="button" onClick={()=>setAccount(null)}>Cancel</button>
         </form>}
       </section>}
-      {!owner && <button onClick={()=>setProduct({...emptyProduct,category:data.categories[0]||''})}>Submit a saree</button>}
-      {product && <form className="vendor-card" onSubmit={submit(async()=>{await api('vendor/listings',product.id?'PUT':'POST',product);setProduct(null);await refresh();})}>
+      {!owner && vendorTab==='Inventory' && <button onClick={()=>setProduct({...emptyProduct,category:data.categories[0]||''})}>Submit New Product / Add Inventory</button>}
+      {product && <form className="vendor-card" onSubmit={submit(async()=>{await api('vendor/listings',product.id?'PUT':'POST',Object.fromEntries(Object.entries(product).filter(([key])=>!['payable','proposed_price','margin_type'].includes(key))));setProduct(null);await refresh();})}>
         <h2>{product.id?'Edit saree':'Submit a saree'}</h2>
         <div className="vendor-fields">
-          {[['name','Product name'],['fabric','Fabric'],['color','Colour']].map(([key,label])=><label key={key}>{label}<input required value={product[key]} onChange={e=>field(setProduct,key,e.target.value)}/></label>)}
+          {[['name','Product name'],['fabric','Fabric'],['color','Colour']].map(([key,label])=><label key={key}>{label}<input required={key==='name'} value={product[key]||''} onChange={e=>field(setProduct,key,e.target.value)}/></label>)}
           <label>Category<select required value={product.category} onChange={e=>field(setProduct,'category',e.target.value)}>{data.categories.map(c=><option key={c}>{c}</option>)}</select></label>
           <label>Type<select value={product.type} onChange={e=>field(setProduct,'type',e.target.value)}><option>Unstitched</option><option>Stitched</option></select></label>
           {numberField('Stock quantity','stock',product,setProduct)}
         </div>
         <label>Description<textarea required value={product.description} onChange={e=>field(setProduct,'description',e.target.value)}/></label>
-        {product.type==='Stitched' && <fieldset><legend>Available sizes</legend>{SIZES.map(s=><label className="vendor-inline" key={s}><input type="checkbox" checked={product.sizes.includes(s)} onChange={e=>field(setProduct,'sizes',e.target.checked?[...product.sizes,s]:product.sizes.filter(x=>x!==s))}/> {s}</label>)}</fieldset>}
-        <label>Upload product photos<input type="file" multiple accept="image/jpeg,image/png,image/webp" disabled={busy} onChange={e=>{const files=[...e.target.files];e.target.value='';if(!files.length)return;action(async()=>{const form=new FormData();files.forEach(file=>form.append('images[]',file));const uploads=await api('vendor/media','POST',form);setProduct(p=>({...p,images:[...p.images,...uploads.images]}));});}}/></label>
+        {false && <fieldset><legend>Available sizes</legend>{SIZES.map(s=><label className="vendor-inline" key={s}><input type="checkbox" checked={product.sizes.includes(s)} onChange={e=>field(setProduct,'sizes',e.target.checked?[...product.sizes,s]:product.sizes.filter(x=>x!==s))}/> {s}</label>)}</fieldset>}
+        <label>Upload internal reference photos<input type="file" multiple accept="image/jpeg,image/png,image/webp" disabled={busy} onChange={e=>{const files=[...e.target.files];e.target.value='';if(!files.length)return;action(async()=>{const form=new FormData();files.forEach(file=>form.append('images[]',file));const uploads=await api('vendor/media','POST',form);setProduct(p=>({...p,images:[...p.images,...uploads.images]}));});}}/></label>
         <div className="vendor-thumbnails">{product.images.map((image,i)=><figure key={image}><img src={image} alt={'Product photo '+(i+1)}/><button type="button" disabled={i===0} onClick={()=>field(setProduct,'images',[image,...product.images.filter(x=>x!==image)])}>{i===0?'Primary':'Make primary'}</button><button type="button" onClick={()=>field(setProduct,'images',product.images.filter(x=>x!==image))}>Remove photo</button></figure>)}</div>
-        <h3>Vendor financial information</h3><div className="vendor-fields">
+        <label>Additional notes<textarea value={product.notes||''} onChange={e=>field(setProduct,'notes',e.target.value)}/></label><h3>Vendor financial information</h3><div className="vendor-fields">
           {numberField('Original purchase cost','purchase_cost',product,setProduct)}
           {numberField('Desired profit','margin',product,setProduct)}
-          {numberField('Proposed selling price','proposed_price',product,setProduct)}
-          {numberField('Requested vendor payable','payable',product,setProduct)}
+
         </div>
-        <p>Suggested payable {currency(Number(product.purchase_cost)+(Number(product.margin)))}</p>
+        <p>Vendor expected entitlement {currency(Number(product.purchase_cost)+(Number(product.margin)))}</p>
         <button disabled={busy}>Send for review</button> <button type="button" onClick={()=>setProduct(null)}>Cancel</button>
       </form>}
       {owner && embedded && review && <InventoryDialog label="Review vendor submission" onClose={()=>setReview(null)}>
-        <form className="vendor-card" onSubmit={submit(async()=>{await api('vendor/review','PUT',review);setReview(null);await refresh();})}>
+        <form className="vendor-card" onSubmit={submit(async()=>{await api('vendor/review','PUT',Object.fromEntries(Object.entries(review).filter(([key])=>key!=='approved_payable')));setReview(null);await refresh();})}>
           {error&&<p role="alert" className="error">{error}</p>}<h2 id="vendor-review-title">Review {review.code}</h2><h3>{review.details.name}</h3>
           <p>{review.details.category} · {review.details.type} · {review.details.fabric} · {review.details.color} · Stock {review.details.stock}</p>
           <p>{review.details.sizes?.join(', ')}</p><p>{review.details.description}</p>
           <p>{review.vendor?.name} · {review.vendor?.contact_person} · {review.vendor?.phone} · {review.vendor?.contact_email||review.vendor?.email} · {review.vendor?.address}</p>
           <div className="vendor-thumbnails">{review.details.images.map(src=><img key={src} src={src} alt="Submitted saree"/>)}</div>
-          <p>Original cost {currency(review.details.purchase_cost)} · Expected profit {currency(review.details.margin)} · Asking {currency(review.details.payable)} · Proposed retail {currency(review.details.proposed_price)}</p>
+          <p>Original cost {currency(review.details.purchase_cost)} · Desired profit {currency(review.details.margin)} · Entitlement {currency(Number(review.details.purchase_cost)+Number(review.details.margin))}</p>
           <label>Review outcome<select value={review.status} onChange={e=>field(setReview,'status',e.target.value)}>{['Approved','Rejected','Changes Requested'].map(x=><option key={x}>{x}</option>)}</select></label>
-          {review.status==='Approved' ? numberField('Approved purchase price','approved_payable',review,setReview):<label>Reason or correction notes<textarea required={review.status==='Changes Requested'} value={review.reason||''} onChange={e=>field(setReview,'reason',e.target.value)}/></label>}
+          {review.status==='Approved' ? <p>Approved entitlement {currency(Number(review.details.purchase_cost)+Number(review.details.margin))}</p>:<label>Reason or correction notes<textarea required={review.status==='Changes Requested'} value={review.reason||''} onChange={e=>field(setReview,'reason',e.target.value)}/></label>}
           <details><summary>Review and code history</summary>{data.codes.filter(x=>x.listing_id===review.id).map(x=><p key={x.code}>{x.created_at} · {x.code}</p>)}{data.reviews.filter(x=>x.listing_id===review.id).map(x=><p key={x.id}>{x.created_at} · {x.status} · {x.reason||''}</p>)}</details>
           <button disabled={busy}>{review.status==='Approved'?'Approve':review.status==='Rejected'?'Reject':'Request changes'}</button><button type="button" onClick={()=>setReview(null)}>Close</button>
         </form>
@@ -166,7 +169,7 @@ export default function VendorPortal({embedded=false}) {
         {record.kind==='link'?<><p>Create the public product separately in <a href="/admin?tab=products" target="_blank" rel="noreferrer">store administration</a>, then select it here. Linking preserves its publication status.</p><button type="button" onClick={()=>action(refresh)}>Refresh listings</button><label>Storefront product<select required value={record.product_id||''} onChange={e=>field(setRecord,'product_id',e.target.value)}><option value="">Select a product</option>{data.storefront.map(p=><option key={p.id} value={p.id}>{p.name} ({p.publication_status})</option>)}</select></label></>:numberField(record.kind==='purchase'?'Quantity received':'Payment amount',record.kind==='purchase'?'quantity':'amount',record,setRecord)}
         <button disabled={busy}>Save record</button> <button type="button" onClick={()=>setRecord(null)}>Cancel</button>
       </form>}
-      {(!owner || (embedded&&['Inventory','Pending reviews'].includes(tab))) && <section className="vendor-card"><h2>{owner?'Vendor inventory':'Your listings'}</h2>
+      {((!owner&&vendorTab==='Inventory') || (embedded&&['Inventory','Pending reviews'].includes(tab))) && <section className="vendor-card"><h2>{owner?'Vendor inventory':'Your listings'}</h2>
         <div className="vendor-fields">
         {owner && <label>Vendor<select value={filters.vendor||''} onChange={e=>field(setFilters,'vendor',e.target.value)}><option value="">All vendors</option>{data.vendors.map(v=><option key={v.id} value={v.id}>{v.name}</option>)}</select></label>}
         <label>Category<select onChange={e=>field(setFilters,'category',e.target.value)}><option value="">All</option>{data.categories.map(x=><option key={x}>{x}</option>)}</select></label>
@@ -174,13 +177,13 @@ export default function VendorPortal({embedded=false}) {
         {['name','code'].map(k=><label key={k}>Filter by {k}<input onChange={e=>field(setFilters,k,e.target.value)}/></label>)}
         {[['type',['Stitched','Unstitched']],['status',statuses],['stock',['available','sold out']]].map(([k,choices])=><label key={k}>Filter by {k}<select onChange={e=>field(setFilters,k,e.target.value)}><option value="">All</option>{choices.map(v=><option key={v}>{v}</option>)}</select></label>)}
         </div>
-        <div className="table-scroll"><table><thead><tr>{['Photo','Code','Product',...(owner?['Vendor']:[]),'Category','Type','Original cost','Expected profit','Asking price','Proposed retail','Approved price','Stock','Status',...(owner?['Storefront']:[]),'Actions'].map(h=><th key={h}>{h}</th>)}</tr></thead>
+        <div className="table-scroll"><table><thead><tr>{['Photo','Code','Product',...(owner?['Vendor']:[]),'Category','Type','Original cost','Expected profit','Entitlement','Approved entitlement','Stock','Status',...(owner?['Storefront']:[]),'Actions'].map(h=><th key={h}>{h}</th>)}</tr></thead>
         <tbody>{scoped.map(row=><tr key={row.id}>
           <td><button className="vendor-image-button" type="button" aria-label={'Preview '+row.details.name} onClick={()=>setPreview(row.details.images[0])}><img src={row.details.images[0]} alt=""/></button></td>
           <td>{row.code}</td><td>{row.details.name}</td>{owner&&<td>{vendorName(row.vendor_id)}</td>}
           <td>{row.details.category}</td><td>{row.details.type}</td><td>{row.details.purchase_cost==null?'—':currency(row.details.purchase_cost)}</td>
-          <td>{currency(row.details.margin)}</td><td>{currency(row.details.payable)}</td><td>{row.details.proposed_price==null?'—':currency(row.details.proposed_price)}</td><td>{row.approved_payable==null?'—':currency(row.approved_payable)}</td>
-          <td>{row.details.stock}</td><td>{row.status}{purchases.some(p=>p.listing_id===row.id)?' · Purchased':''}{row.review_reason&&<p>{row.review_reason}</p>}</td>{owner&&<td>{row.product_id?'Linked':'Not linked'}</td>}
+          <td>{currency(row.details.margin)}</td><td>{currency(Number(row.details.purchase_cost)+Number(row.details.margin))}</td><td>{row.approved_payable==null?'—':currency(row.approved_payable)}</td>
+          <td>{row.details.stock}</td><td>{row.status}{purchases.some(p=>p.listing_id===row.id)?' · Purchased':''}{row.review_reason&&<p>{row.review_reason}</p>}</td>{owner&&<td>{row.product_id?<><a href="/admin?tab=products" target="_blank" rel="noreferrer">Manage public listing</a>{data.official_products?.filter(p=>p.id===row.product_id).map(p=><p key={p.id}>{p.image&&<button className="vendor-image-button" onClick={()=>setPreview(p.image)}><img src={p.image} alt="Official photograph"/></button>}{p.name} · {currency(p.price)} · {p.publication_status}</p>)}</>:'Not linked'}</td>}
           <td>{(owner||['Pending','Changes Requested'].includes(row.status))&&<button onClick={()=>setProduct({...emptyProduct,...row.details,id:row.id})}>Edit</button>}
           {!owner&&<form onSubmit={e=>{e.preventDefault();const stock=new FormData(e.currentTarget).get('stock');action(async()=>{await api('vendor/stock','PUT',{id:row.id,stock});await refresh();});}}><label>Stock<input name="stock" type="number" min="0" required defaultValue={row.details.stock}/></label><button disabled={busy}>Update stock</button></form>}
           {owner&&<button onClick={()=>setReview({id:row.id,code:row.code,details:row.details,vendor:vendors.find(v=>v.id===row.vendor_id),status:'Approved',approved_payable:row.approved_payable??row.details.payable})}>Review</button>}

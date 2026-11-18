@@ -85,6 +85,7 @@ class VendorInventoryController extends Controller
                     ->orderBy('name')->get(['id','name','publication_status']);
                 $result['storefront_count']=DB::table('products')->where('active',true)->where('publication_status','published')->count();
                 $result['reviews']=DB::table('vendor_reviews')->orderByDesc('id')->get();
+                $result['official_products']=DB::table('products')->whereIn('id',$listings->pluck('product_id')->filter())->get(['id','name','image','images','price','stock','publication_status','sku']);
                 $result['codes']=DB::table('vendor_inventory_codes')->orderByDesc('id')->get(['listing_id','code','created_at']);
 
             }
@@ -128,7 +129,7 @@ class VendorInventoryController extends Controller
         $parts=preg_split('/[^a-z0-9]+/',$slug,-1,PREG_SPLIT_NO_EMPTY);
         $base=count($parts)>1?implode('',array_map(fn($part)=>$part[0],$parts)):substr($parts[0]??'CAT',0,3);
         $abbreviation=$known[$slug]??strtoupper($base ?: 'CAT');
-        return 'HS-'.substr($abbreviation,0,12).'-'.str_pad((string) $id,4,'0',STR_PAD_LEFT);
+        return 'HS-'.substr($abbreviation,0,12).'-'.str_pad((string) $id,3,'0',STR_PAD_LEFT);
     }
 
     private function saveListing(Request $r, bool $owner)
@@ -138,17 +139,17 @@ class VendorInventoryController extends Controller
             'vendor_id' => $owner ? 'nullable|integer' : 'prohibited',
             'name' => 'required|string|max:150', 'category' => 'required|exists:categories,name',
             'type' => 'required|in:Stitched,Unstitched', 'description' => 'required|string|max:10000',
-            'fabric' => 'required|string|max:100', 'color' => 'required|string|max:50',
-            'sizes' => 'required_if:type,Stitched|array|max:6',
+            'fabric' => 'nullable|string|max:100', 'color' => 'nullable|string|max:50',
+            'notes'=>'nullable|string|max:2000',
+            'sizes' => 'sometimes|array|max:6',
             'sizes.*' => ['distinct', Rule::in(SizeGuide::SIZES)],
             'stock' => 'required|integer|min:0|max:1000000',
             'expected_stock' => 'nullable|integer|min:0|max:1000000',
             'images' => 'required|array|min:1|max:'.BusinessSettings::get()['max_product_images'],
             'images.*' => ['distinct', 'regex:~^/media/products/[a-f0-9]{32}\.webp$~D'],
-            'purchase_cost' => 'nullable|numeric|decimal:0,2|min:0|max:10000000',
+            'purchase_cost' => 'required|numeric|decimal:0,2|min:0|max:10000000',
             'margin' => 'required|numeric|decimal:0,2|min:0|max:10000000',
-            'proposed_price' => 'required|numeric|decimal:0,2|min:0|max:10000000',
-            'payable' => 'required|numeric|decimal:0,2|min:0|max:10000000',
+            'proposed_price' => 'prohibited', 'payable' => 'prohibited',
             'retail_price' => 'prohibited', 'code' => 'prohibited',
         ]);
 
@@ -177,11 +178,10 @@ class VendorInventoryController extends Controller
             DB::table('vendor_submission_images')->where('listing_id',$id)->delete();
             foreach ($data['images'] as $position=>$path) DB::table('vendor_submission_images')->insert(['listing_id'=>$id,'path'=>$path,'position'=>$position]);
             DB::table('vendor_submission_finances')->updateOrInsert(['listing_id'=>$id],[
-                'purchase_cost'=>$data['purchase_cost']??null,'margin'=>$data['margin'],'payable'=>$data['payable'],'proposed_price'=>$data['proposed_price'],
+                'purchase_cost'=>$data['purchase_cost']??null,'margin'=>$data['margin'],'payable'=>round($data['purchase_cost']+$data['margin'],2),'proposed_price'=>null,
             ]);
             $code=$listing->inventory_code ?? null;
-            $oldCategory=$listing ? json_decode($listing->details,true,flags:JSON_THROW_ON_ERROR)['category'] : null;
-            if (!$code || ($owner && $oldCategory !== $data['category'])) {
+            if (!$code) {
                 $sequence=DB::table('vendor_inventory_codes')->insertGetId(['listing_id'=>$id,'created_at'=>now()]);
                 $code=$this->code($sequence,$data['category']);
                 DB::table('vendor_inventory_codes')->where('id',$sequence)->update(['code'=>$code]);
@@ -195,13 +195,19 @@ class VendorInventoryController extends Controller
     {
         $data=$r->validate([
             'id'=>'required|integer','status'=>'required|in:Approved,Rejected,Changes Requested',
-            'approved_payable'=>'required_if:status,Approved|nullable|numeric|decimal:0,2|min:0|max:10000000',
+            'approved_payable'=>'nullable|numeric|decimal:0,2|min:0|max:10000000',
             'reason'=>'required_if:status,Changes Requested|nullable|string|max:2000',
         ]);
         return DB::transaction(function () use ($data,$r) {
             $row=DB::table('vendor_listings')->where('id',$data['id'])->lockForUpdate()->first();
             abort_unless($row,404);
-            $price=$data['status']==='Approved'?$data['approved_payable']:$row->approved_payable;
+            $price=$row->approved_payable;
+            if ($data['status']==='Approved') {
+                $finance=DB::table('vendor_submission_finances')->where('listing_id',$row->id)->first();
+                abort_unless($finance && $finance->purchase_cost!==null,422,'Enter vendor purchase cost and desired profit before approval.');
+                $price=round($finance->purchase_cost+$finance->margin,2);
+                abort_if(isset($data['approved_payable']) && \App\Support\VendorSettlement::cents($data['approved_payable'])!==\App\Support\VendorSettlement::cents($price),422,'Approved entitlement must equal purchase cost plus desired profit.');
+            }
             DB::table('vendor_listings')->where('id',$row->id)->update([
                 'status'=>$data['status'],'approved_payable'=>$price,'review_reason'=>$data['reason']??null,'updated_at'=>now(),
             ]);
@@ -235,7 +241,12 @@ class VendorInventoryController extends Controller
                 if ($path==='purchase') {
                     DB::table('vendor_purchases')->insert(['listing_id'=>$row->id,'quantity'=>$data['quantity'],'unit_price'=>$row->approved_payable,'received_at'=>now()]);
                 } else {
-                    DB::table('products')->where('id',$data['product_id'])->lockForUpdate()->first();
+                    $public=DB::table('products')->where('id',$data['product_id'])->lockForUpdate()->first();
+                    $photos=array_filter(json_decode($public->images??'[]',true)?:[$public->image]);
+                    abort_unless(count($photos),422,'Upload official product photography.');
+                    abort_if(DB::table('vendor_submission_images')->whereIn('path',$photos)->exists(),422,'Vendor reference photos cannot be used as official images.');
+                    abort_if(DB::table('media_assets as m')->join('users as u','u.id','=','m.uploaded_by')->whereIn('m.path',$photos)->where('u.role','vendor')->exists(),422,'Use owner-uploaded official photos.');
+                    DB::table('products')->where('id',$public->id)->update(['sku'=>$row->inventory_code]);
                     abort_if($row->product_id,409,'This submission is already linked.');
                     abort_if(DB::table('vendor_listings')->where('product_id',$data['product_id'])->exists(),409,'This storefront product is already linked.');
                     DB::table('vendor_listings')->where('id',$row->id)->update(['product_id'=>$data['product_id'],'updated_at'=>now()]);

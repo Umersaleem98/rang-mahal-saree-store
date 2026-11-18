@@ -67,6 +67,7 @@ class BusinessController extends Controller
             $before=\App\Support\OrderEmails::snapshot($o);
             DB::table('orders')->where('id', $o->id)->update($fields);
             if ($before!==\App\Support\OrderEmails::snapshot(DB::table('orders')->find($o->id))) \App\Support\OrderEmails::record($o->id, 'details');
+            \App\Support\VendorSettlement::syncOrder($o->id);
             return response()->json(['ok' => true]);
         });
     }
