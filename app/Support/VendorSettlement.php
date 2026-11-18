@@ -85,7 +85,7 @@ class VendorSettlement
         }
         $active=$eligible||$returnExpense;
         $previousActive=$previous && in_array($previous->kind,['Sale','Return expense'],true);
-        if($previousActive && $active && $previous->kind===$kind && $previous->amount===$due && $previous->earnings===$earnings && json_decode($previous->components,true)===$components) return;
+        if($previousActive && $active && $previous->kind===$kind && $previous->amount===$due && $previous->earnings===$earnings && json_decode($previous->components,true)==$components) return;
         if($previousActive){
             DB::table('vendor_settlement_entries')->insertOrIgnore([
                 'sale_id'=>$saleId,'vendor_id'=>$sale->vendor_id,'revision'=>$previous->revision,'kind'=>'Reversal',
