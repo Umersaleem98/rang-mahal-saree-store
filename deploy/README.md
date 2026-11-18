@@ -7,7 +7,7 @@ The cPanel Git repository is `/home/jjt1xvidnzva/repositories/rangmahal`, linked
 ## Publish an update
 
 1. Run `npm run build`, `php artisan test`, and `git diff --check` locally. Commit the compiled `public/build` files with the source; this hosting account has no Node.js runtime.
-2. Push to GitHub `main`. Use `[skip netlify]` in the commit message to avoid updating the old Next.js preview.
+2. Push to GitHub `main`. Use ordinary commit messages.
 3. Open cPanel → Git Version Control → Manage Rang Mahal → Pull or Deploy. Click **Update from Remote**, then **Deploy HEAD Commit**. A push alone does not publish the website.
 
 `.cpanel.yml` runs `deploy/cpanel-deploy.sh`. It preserves production credentials and storage, backs up the public files, application source, and MySQL database under `/home/jjt1xvidnzva/backups/rangmahal`, installs production Composer dependencies, migrates the database, publishes assets, and rebuilds Laravel caches. A failed database backup stops deployment before migrations. Monitor backup disk usage and copy backups off the account regularly; this is not an offsite backup service.

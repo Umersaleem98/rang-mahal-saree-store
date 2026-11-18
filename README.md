@@ -136,6 +136,6 @@ The live Laravel application runs at **[rangmahal.site](https://rangmahal.site/)
 | [Hosting requirements](DEPLOYMENT.md) | General PHP hosting setup |
 | [Project links](LINKS.md) | Store and administration addresses |
 
-Netlify cannot run Laravel/PHP. Laravel pushes use `[skip netlify]`; the earlier Netlify preview is not the current production store.
+Netlify cannot run Laravel/PHP. Publish ordinary commits directly to main; the earlier Netlify preview is not the current production store.
 
 **Operational inputs and limitations:** supply real garment measurements and multi-view product photos. Courier updates are entered manually; no courier API or card gateway is integrated. Weight/restriction notes do not create a new shipping-rate engine. Mail-server acceptance does not guarantee inbox placement.
