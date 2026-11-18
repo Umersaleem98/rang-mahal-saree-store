@@ -33,3 +33,7 @@ yarn-error.log
 /.zed
 
 local-server*.log
+
+# Local image conversion tooling
+/tmp-image-converter/
+/convert_raw_photos.py
